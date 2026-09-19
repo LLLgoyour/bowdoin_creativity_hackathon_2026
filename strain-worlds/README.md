@@ -31,18 +31,154 @@ halftoned at its own screen angle, each with its own seeded registration slip,
 multiplied together on paper. No card is ever filled with the colour it appears
 to be.
 
-Everything below is a number a script in `tools/` prints. Nothing here is
-estimated, and where a quantity has two defensible estimators, both are given.
+Numerical results below are measured by the probes in `tools/`; timing figures
+are observations from those runs, not frame-rate guarantees.
 
 ## Run it
 
-    open builds/strain-worlds.html  # the built single file, no server, no deps
+    open builds/strain-worlds.html # the built single file, no server, no deps
 
 `shell.html` loads `src/*.js` as classic scripts and also works straight off
 `file://`. Rebuild the single file after editing `src/`:
 
-    node build.mjs builds/strain-worlds.html # rebuild the demo in this folder
-    node tools/embed.mjs           # regenerates src/data-gsfc.js from the .dat
+    node build.mjs builds/strain-worlds.html   # inlines src/ + data into one file
+    node tools/embed.mjs                       # regenerates src/data-gsfc.js from the .dat
+
+## The room
+
+The page opens in the workshop: an isometric print room drawn in the press's own
+three inks, with the ink library on the back wall, the press on the left, the
+stock table and the listening bench on the right. Drag to wander, scroll to look
+closer (0.65x to 2.8x), arrow keys to pan, `+`/`-` to zoom, and press `0` to
+square the view up again.
+
+Five stations, each with its own function rather than an alias of another:
+
+| Station | What it is for | Open it | Key |
+|---|---|---|---|
+| SOURCE | bring a file: source choices, a preview of what arrived, and the harmonics dial when a picture did | click the stock on the table, or drop a file anywhere on the page | `F` |
+| INKS | the ink library: three coverage dials, the seven-recipe overprint chart and one live sample sheet | click the ink library | `I` |
+| PRESS | the machine itself: register, proof and edition sheets | click the press | `P` |
+| LISTEN | the listening bench: scope and synth | click the bench screen | `O` |
+| ROOM | the workshop view | click `← ROOM`, or press `Escape` | — |
+
+Every station carries the same paper navigation tags — `← ROOM`, `SOURCE`,
+`INKS`, `PRESS`, `LISTEN`, minus the one you are standing at — so you can move
+between them without going back through the room. A dropped file lands on the
+source table and opens SOURCE. The room is view only: it never edits the record,
+the field or the world.
+
+The isometric scene is original drawing code informed by
+[a-small-light-three](https://a-small-light-three.vercel.app/) — isometric paper
+architecture, screened ink, purposeful props and small stop-motion gestures. No
+reference assets, code or data were taken, and `src/w-room.js` says so at the
+top of the file.
+
+## Source and ink
+
+**SOURCE** (`src/w-stock.js`) is where a commission arrives: the record, seeded
+noise, or a file you drop, with a preview of the stock on the table. When the
+file is a picture, its `HARMONICS P` dial re-fits the contour to that many
+rotating vectors; the fitting error and IoU are the numbers **The commission**
+quotes below. Other file kinds show their own reading instead of a dial.
+
+**INKS** (`src/w-ink.js`) is the ink library: three coverage dials, the fixed
+overprint chart of the seven recipes the press can make (each solid and halftone
+in the three inks and their overprints), and exactly one sample sheet. The sample
+is not a picture of an overprint — it is the press's own overprint, handed over by
+the app, so it changes the moment a plate's coverage changes.
+
+A source change or a coverage change is a **job change**: it invalidates an
+approved proof, and it does not erase edition sheets that have already been
+delivered. The press keeps the register, the proof and the edition numbering.
+
+## Stand at the press
+
+The controls are drawn machinery, not HTML sliders or buttons. The artwork
+sits in a quiet dark bed; paper labels, ink-coloured pins and separate
+halftone rulings distinguish things you can grab.
+
+| Part | Gesture |
+|---|---|
+| Register pins around the sheet | Drag each pin into the centre of its pocket; the lens reads **DEAD ON** when the plates meet. |
+| Main lever | Haul down for a proof, again to approve it, then once per edition sheet. The hanging tag tells you the next action. |
+| Ink ducts above the sheet | Drag a duct key to change that plate's ink film. |
+| Law cams at the right | Pull a cam left to engage its rule; drag or scroll its smaller parameter wheels. |
+| Spare plates on the back wall | Carry a plate to the cylinder clamp. |
+| Feed board | Drop a numeric file, image or audio file, then carry its stock into the grippers. Dropping directly into the grippers feeds it immediately. |
+| Delivered sheet | Click to lift it for inspection; click again to put it down. Drag it away to discard it. |
+| Lower throttle and clutch | Move the throttle for speed; drag the clutch up to run or down to stop. |
+| Frame and paperwork | Shake the upright to disturb the world; pull the paperwork tab down to read its measurements. |
+
+A changed plate, law or commission voids approval without erasing delivered
+edition sheets. A completed run makes the lever take a new commission.
+The board-history trace records simulation updates, not display refreshes.
+
+The overprint caches screen centres by sheet size and per-plate registration,
+and reuses its output and seeded paper-grain buffers. It does not reduce
+resolution or replace the three-ink calculation with a flat image.
+`node tools/probe-overprint.mjs` compares **81 cases / 3,801,816 bytes with
+0 differences** against the uncached equation, including resize, ink-key,
+coverage, seed and registration changes.
+
+## The listening bench
+
+The bench is the scope and the synth in one instrument, drawn as machinery:
+five knobs, each dragged up and down (or scrolled over) to turn it.
+
+| Knob | What it does | Readout |
+|---|---|---|
+| `POWER` | starts and stops Web Audio after a gesture | `SOUND ON` / `SILENT` |
+| `PHASE` | `CONTINUOUS` maps the record's phase-rotation rate into the audible range as a continuous pitch; `PENTATONIC` maps each quarter-turn of phase to the next note of a C pentatonic pattern | `CONTINUOUS` / `PENTATONIC` |
+| `DISPLAY GAIN` | vertical scale of the two source traces only; it never changes a sample | 0.25x to 4.00x |
+| `SWEEP OFFSET` | moves the scan line's start within the record; samples are untouched | 0% to 100% |
+| `LOUDNESS` | output level only | 0% to 100% |
+
+The screen shows three traces read off the live state. **01 `Re(h)`** and
+**02 `Im(h)`** are the actual samples of the current record, windowed around the
+scan position, with the sweep line and a dot on the sample the synth is reading.
+**03** is the world's own response — global phase order `r` for SYNCHRONY, live
+card occupancy for the other rules — with its vertical range expanded so small
+changes stay visible while the printed percentages remain the real measurement.
+When the LIFE wave is active the two channels are labelled `Re: source + LIFE`
+and `Im: source + LIFE` instead. The footer prints `SAMPLE i / n`, the record's
+value at that sample and the current gain.
+
+The source advances by `round(sample count / 360)` samples per generation (two
+for the GSFC file) and wraps at the end; the sweep starts at 40% of the record so
+the larger strain is visible immediately. This scan is a reading of the original
+record: it does not inject a driving signal into the world, which continues to
+read the complete mapped field every step. The synth follows the same sample
+cursor and falls silent when the machine is stopped — clutch down, or speed at
+zero — rather than continuing to hold its last note. Loudness follows the
+measured amplitude `|h|`, stereo position follows `Re(h)/|h|`, and the same
+amplitude opens a low-pass filter. `node tools/probe-sonify.mjs` tests that
+mapping.
+
+The sound is a sonification of numerical data, not a microphone recording and not
+a claim about sound propagating through space — the instrument prints that line
+under itself. `node tools/render-sonification.mjs` also writes
+`builds/gsfc-phase-music.wav`, a 28-second full-record preview of the melodic
+mapping; the page makes its audio live in Web Audio and does not need the file.
+
+### LIFE feedback
+
+When LIFE is selected, every generation projects the living cells in each grid
+column onto a complex phasor: a cell's row sets its angle. Neighbouring columns
+are smoothed, then their pattern contributes 65% of a new wave while the original
+record contributes 35%. The strength follows the square root of the live cell
+density; an extinct board makes a flat, silent wave. The field and the original
+source record are unchanged, so the source still drives the automaton while its
+cells control the presentation in return. On the scope the source trace stays
+faint and the LIFE wave is drawn bright over it on the same fixed scale, with the
+live cell count printed; the synth takes that wave's amplitude for volume and
+filter brightness, its real component for stereo position, and its real and
+imaginary components to bend the source-based pitch, quantised to semitones in
+`PENTATONIC`. The wave is recomputed when the board's state changes — including
+after a shake — so a still board keeps its last reading rather than being redrawn
+per frame. Other worlds keep the record's own sonification.
+`node tools/probe-life-feedback.mjs` checks that changing cell positions changes
+both the displayed wave and the sound controls without editing the data.
 
 ## The press
 
@@ -73,10 +209,9 @@ violets: `#57ac4a -> #687e2c` (dE 27.71), `#3fb8a0 -> #76937e` (26.89),
 `#5a7fd8 -> #1e67ac` (16.93). Blue plus yellow does not make that green.
 
 **So the palette is the press's gamut.** At boot `snapPalette()` replaces every
-flat with what the inks actually lay down for it, because a shop cannot name a
-colour it cannot print. After that the chip in the rail, the proof panel and
-the pulled sheet agree to **max dE 0.4331 across all 44 colours** — the residue
-is 8-bit rounding. The cost is honest and visible: the greens became olive.
+flat with what the inks actually lay down for it. After that the palette
+and its printed recipes agree to **max dE 0.4331 across all 44 colours** —
+the residue is 8-bit rounding. The cost is honest and visible: the greens became olive.
 
 **A colour the separation cannot parse prints as bare paper.** That was a real
 bug: `mixHex()` returned `rgb(r,g,b)` strings, `hex2rgb()` reads `#rrggbb`, and
@@ -99,67 +234,6 @@ three solids, their half tints and all four overprints — printed *through the
 same three plates* as the image, because a control strip that was composited
 separately would not show the registration slip it exists to reveal.
 
-## Oscilloscope view
-
-The default stage pairs the evolving card world with a CRT-style reading of the
-source. CH1 and CH2 show the actual `Re(h)` and `Im(h)` samples from the GSFC
-record, with a moving scan line and phosphor afterglow. The third trace measures
-the world: global phase order `r` for SYNCHRONY, or the fraction of live board
-cells for the other three rules. Its range expands to make small changes visible;
-the displayed percentage remains the real measurement. The source advances by
-`round(sample count / 360)` samples per generation (two for the GSFC file), and
-wraps at the end. The sweep starts at 40% of the record so the larger strain is
-visible immediately; the sweep-offset slider can take it back to the start.
-This scan is a reading of the original record: it does not
-inject a new driving signal into the world, which continues to read the complete
-mapped field each step.
-
-Use **scope on/off** in THE PULL, or press **O**, to switch between the paired view
-and the original full-screen paper board. **Scope gain** changes only the
-vertical display scale of the two source traces; it never changes the samples.
-**Sweep offset** moves only the scan line, also leaving the samples unchanged.
-Pause, step, reseed and shake still work in either view. Numeric, image, and
-audio files converted into complex waveforms also use the two-channel scope.
-
-## Hear the strain
-
-Press **▶ sound** at the top of the page to start Web Audio after a user gesture.
-The synth follows the oscilloscope's sample cursor, and mutes when the world is
-paused. **Strain tone** maps the record's phase-rotation rate, shifted into
-the audible range, to continuous pitch. **Phase music** maps each quarter-turn
-of phase to the next note of a C pentatonic pattern. In both modes the measured
-amplitude `|h|` controls loudness, `Re(h)/|h|` controls stereo position, and
-amplitude also opens a low-pass filter. The volume slider affects only output
-level. The sound is a sonification of numerical data, not a microphone recording
-or a claim about sound propagating through space. The mapping is tested by
-`node tools/probe-sonify.mjs`.
-
-`node tools/render-sonification.mjs` also creates
-`builds/gsfc-phase-music.wav`, a 28-second full-record preview of the melodic
-mapping. The interactive single-file page makes its audio live in Web Audio
-and does not need the WAV file.
-
-## LIFE feedback
-
-When **LIFE** is selected, every generation projects the living cells in each
-grid column onto a complex phasor: a cell's row sets its angle. Neighbouring
-columns are smoothed, then their pattern contributes 65% of a new wave while
-the original record contributes 35%. The strength follows the square root of
-the live cell density; an extinct board makes a flat, silent wave. The field
-and the original source record are unchanged, so the source still drives the
-automaton while its cells control the presentation in return.
-
-On the oscilloscope the pale traces show the original `Re(h)` and `Im(h)`;
-the bright traces show the changing LIFE wave on the same fixed scale. The
-sound uses that wave's amplitude for volume and filter brightness, its real
-component for stereo position, and its real and imaginary components to bend
-the source-based pitch. Phase music quantises the pitch bend to semitones.
-Pausing freezes the board and mutes sound. Stepping and shaking redraw the
-wave immediately; while playing, they also change the sound immediately.
-Other worlds retain the original data sonification.
-`node tools/probe-life-feedback.mjs` checks that changing cell positions
-changes both the displayed wave and sound controls, without editing the data.
-
 ## The record
 
 `src/data-gsfc.js` holds the GSFC QC6 strain record as base64 Float64 blocks:
@@ -167,6 +241,14 @@ changes both the displayed wave and sound controls, without editing the data.
 0.410804 at sample 549. The trajectory is a slowly widening spiral of
 **11.0304 turns**, clockwise, so its spectral energy sits at *negative*
 frequency.
+
+**Provenance is unverified.** The supplied file is named
+`GSFC_QC6_strain_2_2.dat.txt` and its header says only `#time Re(h) Im(h)`.
+The filename is not evidence of a particular observatory, catalogue, physical
+event, publication or licence. No authoritative source for this exact file
+was established. Its original bytes are retained unchanged; it is used here
+as an artistic numeric input. The toy's seconds/Hz labels assume seconds in
+the time column; the file itself does not establish those units.
 
 Two things about it are worth stating because code depends on them:
 
@@ -190,7 +272,7 @@ turning it into a wave. `tools/probe-wave.mjs` measures that path end to end.
 **A picture and a signal are the same object.** An image is traced to its
 silhouette contour — `tools/fish.png` gives 1024 contour points — and the
 contour is fitted as a sum of rotating vectors (an epicycle series, the DFT of
-the closed curve). The harmonics slider is the fit: sweeping P, the
+the closed curve). The harmonics wheel is the fit: sweeping P, the
 reconstruction error falls **60.145 px RMS at P=1 to 0.000 px at full P**,
 monotonically, and the silhouette IoU rises **0.4683 to 0.9980**. At the
 default P=48 the fish is 8.398 px RMS, IoU 0.9386 — recognisably a fish, made
@@ -415,7 +497,7 @@ for `rd` at 120x120.
 ## Files
 
     shell.html          the file:// page: loads src/ as classic scripts
-    build.mjs           inlines src/ into one self-contained ../strain-worlds.html
+    build.mjs           inlines src/ into the one file you name (builds/strain-worlds.html here)
     src/core.js         shared vocabulary: palette, RNG, view buffers, registries
     src/w-field.js      the four field builders + the pure parsers
     src/w-synch.js      phase-oscillator world
@@ -423,11 +505,21 @@ for `rd` at 120x120.
     src/w-rd.js         Gray-Scott world
     src/w-life.js       B/S world
     src/w-render.js     the press: separation, three plates, halftone, furniture
-    src/w-app.js        the shop: state, controls, loop
+    src/w-shop.js       the physical machine: geometry, screens, gestures, instruments
+    src/w-room.js       the workshop: isometric room, stations, keys, navigation
+    src/w-stock.js      the SOURCE station: source choices, stock preview, harmonics
+    src/w-ink.js        the INKS station: coverage dials, overprint chart, live sample
+    src/w-sonify.js     record -> audible controls (tone, music, LIFE feedback)
+    src/w-app.js        the shop: job state, media intake, simulation clock
     src/data-gsfc.js    generated record embed
     tools/embed.mjs     record -> src/data-gsfc.js
     tools/probe-*.mjs   one probe per module: prints the numbers quoted above
     tools/probe-press.mjs   loads the real renderer: gamut, separation, dE, slip
+    tools/probe-furniture.mjs   registration, workflow-dependent marks, sheet snapshots
+    tools/probe-overprint.mjs   exact cached/uncached pixel parity across state changes
+    tools/probe-sonify.mjs  the tone/music mapping
+    tools/probe-life-feedback.mjs  the LIFE wave follows cell positions without editing data
+    tools/render-sonification.mjs  writes builds/gsfc-phase-music.wav
     tools/probe-wave.mjs    the commission path: contour, epicycles, Hilbert
     tools/ink-fit.mjs   standalone ink fit; found the 79.65 dE of the old table
     tools/itest.mjs     cross-module integration test at 52x52
@@ -437,7 +529,7 @@ for `rd` at 120x120.
 
 ## Verify it
 
-    for p in press wave field synch grav rd life; do node tools/probe-$p.mjs; done
+    for p in press furniture overprint sonify life-feedback wave field synch grav rd life; do node tools/probe-$p.mjs; done
     node tools/itest.mjs
     node prototypes/shake/tools/probe-shake-return.mjs
 
@@ -454,3 +546,24 @@ record, so `matrix` in the browser read 18.3% where the probe read 19.231%; with
 that reduction suppressed the four masks in the browser measure
 55.584 / 19.231 / 41.457 / 5.288% against the probe's 55.584 / 19.231 / 41.457 /
 5.288% — 1503, 520, 1121 and 143 cells of 2704.
+
+## Observed for this publication
+
+The lines below are the publisher's own run on the frozen source, not a claim
+about any other machine or browser. Nothing else in this file is asserted as
+observed here.
+
+- `node build.mjs builds/strain-worlds.html` inlines **14/14** modules from
+  `shell.html` with no missing script, and the standalone file is 343.5 KiB.
+- Syntax checked for `w-room.js`, `w-stock.js`, `w-ink.js`, `w-app.js` and
+  `w-shop.js`; `tools/probe-life-feedback.mjs` and `tools/probe-press.mjs` pass.
+- The built file booted from `file://` with no window errors and no `lastErr`,
+  loading the supplied record (773 samples).
+- All four room labels were clicked and each routed to a distinct station —
+  `SOURCE`, `INKS`, `LISTEN`, `PRESS` — with that station's own actions and
+  dials, rather than an alias of another screen.
+- Native drags of all three registration pins left residuals `[0,0,0]` with
+  registration error empty.
+- The physical lever produced a proof and approved it into the run.
+- A native ink dial drag moved an ink key from `.64` to `.7511` and invalidated
+  the approved proof back to `makeready`, with the delivered sheets untouched.

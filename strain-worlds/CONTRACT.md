@@ -18,8 +18,10 @@ Fields and worlds never touch the DOM.
 
 ## Hard rules for every module in `src/`
 
-1. **DOM-free.** No `document`, `window`, `canvas`, `performance`, `atob` guards
-   excepted. Only the renderer (`w-render.js`) and the app (`w-app.js`) see the DOM.
+1. **DOM-free models.** Fields and worlds never access `document`, `window` or
+   canvas. The renderer (`w-render.js`), machine (`w-shop.js`), room and stations
+   (`w-room.js`, `w-stock.js`, `w-ink.js`) and app (`w-app.js`) own browser
+   surfaces; shared decoding helpers may use `atob`.
 2. **Dependency-free.** Use only globals from `core.js` (`PAL`, `INK`, `clamp`,
    `lerp`, `h2`, `mulberry32`, `mixHex`, `rr`, `decodeF64`, `newView`,
    `clearView`, `viewLive`, `defField`, `defWorld`) and JS built-ins. `PAL` is
@@ -39,14 +41,12 @@ Fields and worlds never touch the DOM.
    and `view()` must not build arrays or objects per cell.
 5. **Node-testable.** Every module ships `tools/probe-<id>.mjs` that loads it
    with `node` and prints real numbers. `step()` must not need a DOM.
-6. **Own your file.** Never edit another module. If you need something from one,
-   ask through `hub` (ids below) or state the assumption in your probe output.
 
 ## Field contract (`w-field.js`)
 
 ```js
 defField({
-  id:'path', label:'THE RECORD ITSELF', blurb:'one line for the rail',
+  id:'path', label:'THE RECORD ITSELF', blurb:'one line for the job ticket',
   build(rec, w, h, PAR) -> Field
 });
 ```
@@ -93,11 +93,10 @@ A param is a range unless it declares `options`, in which case it is a choice an
  options:[{value:'grid',label:'board samples'},{value:'raw',label:'original samples'}]}
 ```
 
-The app renders `options` params as a select and the rest as a slider, and it applies
-`def` to any param left undefined before the first build — including in `boot()`, so a
-module's own fallback for a missing param must agree with its declared `def`. Do not
-rely on the app to set it: a probe that builds a field directly never goes through
-`drawParams()`.
+The machine draws `options` parameters as detents and numeric parameters as
+turnable wheels. The app supplies `def` for undefined values before building.
+Modules must retain matching fallbacks because a headless probe can call a
+builder directly without the app.
 
 `PAR` is a live object: `{...your params..., speed, seed}`. Read it every step;
 never cache it across steps. `w`,`h` are the grid size (`w*h` = cell count).
@@ -173,10 +172,10 @@ between two steps.
 *raises* it: `V.spark[i] = 1` on the tick a birth happens there. A world must not
 decay the array, and must not keep spark state in `S`; clearing the whole array
 at the start of its own `step()` is allowed (a spark then lasts one generation).
-The app decays the array by 0.78 once per generation, so a spark is visible for
-about five generations at any frame rate. The renderer decides whether a
-starburst is actually drawn: cards must be at least 9 px, and at most
-`R.sparkBudget` (the rail's starbursts slider, default 8) are spent per frame.
+The app decays the array by 0.78 once per generation, independently of paint.
+The renderer draws starbursts only when cards are at least 7 device pixels,
+and spends at most `R.sparkBudget` per frame. The anti-setoff spray valve owns
+that budget; its initial value is 8.
 Rarity is therefore enforced twice on purpose, and a spark that is never drawn is
 not an error.
 
@@ -191,9 +190,10 @@ Indices are `i = y*w + x` everywhere. The renderer draws nothing else.
 
 ## The record
 
-`src/data-gsfc.js` holds the GSFC QC6 strain record (773 complex samples,
-11.2 turns of a slowly widening spiral in the Re/Im plane) as base64 Float64
-blocks: `const GSFC={name,n,t,re,im}` → `CORE.decodeF64()`.
+`src/data-gsfc.js` holds the supplied `GSFC_QC6_strain_2_2.dat.txt` file as
+base64 Float64 blocks: `const GSFC={name,n,t,re,im}` → `decodeF64()`.
+Its 773 samples trace 11.0304 net turns. Attribution and physical units are
+unverified; retain the filename without inventing an astronomical provenance.
 
 ### Record kinds
 
@@ -205,15 +205,14 @@ and the worlds never learn where a record came from:
 | `numeric` | one column of numbers | normalised magnitude |
 | `complex` | Re and Im columns (the GSFC record) | magnitude |
 | `noise` | seeded white noise | magnitude |
-| `image` | a Hilbert-curve scan of the luminance | luminance |
-| `audio` | decoded mono samples | loudness envelope |
+| `image` | closed silhouette fitted to complex epicycles | distance from contour origin |
+| `audio` | mono samples plus Hilbert quadrature | analytic-signal envelope |
 
 Two requirements that follow from long records:
 
-- **Images keep their locality.** A row-major scan makes the recurrence view
-  meaningless, so scan along a Hilbert curve: neighbours in the series are then
-  neighbours in the picture and `matrix` shows the picture's own texture. Say the
-  mapping in the field note.
+- **Images are contour records.** Trace once, cache the contour, and re-fit its
+  Fourier coefficients when the harmonics wheel changes. Do not substitute a
+  row-major or Hilbert luminance scan for the commission's outline.
 - **Long records are reduced by averaging, not by picking.** A voice message is
   thousands of samples while `path` and `matrix` want one value per grid cell.
   `round(i*(n-1)/(M-1))` point-sampling is right for the 773-sample strain record and
@@ -221,6 +220,89 @@ Two requirements that follow from long records:
   both the density and the picture for a long record so the difference is visible in
   the probe. The frequency fields keep using the record's own full-rate samples; an
   audio record also carries `sr` so those axes can mean Hz.
+
+## Physical press contract
+
+`w-shop.js` owns layout and hit testing together. Draw and pick from the same
+geometry; crop housings if needed, never control labels or cam rims.
+The shell contains a stage canvas and an offscreen native file input.
+Pointer, wheel and native drop events enter through `SHOPVIEW`; machine
+gestures request changes through `API`, never an independent UI state store.
+
+`SHOP.state` progresses `makeready → proof → run → done`. A lever pull makes
+a proof, approves it, or makes the next numbered edition sheet. Changing a
+job's plate, law or source invalidates its proof but preserves delivered
+edition sheets and the next edition number. A new commission clears the tray.
+
+The three registration pins supply `R.slipScale` as a per-plate array; the
+lens and the sheet use the same `measuredSlip()` equation. Ink keys must reach
+`R.inkKey` before painting the sheet. `snapshotSheet()` is the shared crop
+operation, called after drawing the sheet without the machine over it.
+
+The app's interval advances simulation by elapsed wall time and animates
+machine springs. The history ring advances only when simulation state changes.
+Do not replace that clock with a display-dependent animation callback.
+
+Screen-map caches retain only the current size and register offsets per
+plate. Seed changes invalidate grain; key and coverage changes are read on
+every overprint. Keep dot-boundary math in Float64. The exact uncached
+equation in `tools/probe-overprint.mjs` guards against stale caches or changed
+pixels, not merely visually similar output.
+
+## Sonification contract (`w-sonify.js`)
+
+```js
+sonifyFrame(rec, index, mode, out) -> {level, pitch, pan, brightness, sourceHz, noteStep}
+lifeFeedback(rec, S) -> wave | null             // complex presentation wave, or null
+sonifyLifeFrame(rec, feedback, index, mode, out) -> the same control object
+```
+
+`sonifyFrame` is pure: no DOM, no audio nodes. `mode` is `'tone'` — continuous
+pitch taken from the record's phase-rotation rate and folded into 110..800 Hz —
+or `'music'`, where each quarter-turn of phase steps through `SONIFY_SCALE`, a C
+pentatonic over two octaves. `level` follows the measured amplitude, `pan`
+follows `Re(h)/|h|`, and the same amplitude is `brightness`, which opens the
+filter. The app owns the AudioContext, the loudness value and the mute-on-pause
+behaviour; the module only maps numbers.
+
+`lifeFeedback` is the LIFE world's optional return path: live cells in each
+column become a complex phasor (a cell's row sets its angle), neighbours are
+averaged, and the result contributes 65% of a new wave whose remaining 35% is the
+original record, scaled by the square root of live-cell density — an extinct
+board gives a flat, silent wave. `sonifyLifeFrame` wraps `sonifyFrame` and bends
+its pitch, level and pan from that wave. Neither writes to `rec`, the field or
+`S`: the wave is presentation, and the source record still drives the automaton.
+`tools/probe-sonify.mjs` tests the mapping and `tools/probe-life-feedback.mjs`
+tests that cell positions change the wave without editing the data.
+
+## Room and station contract (`w-room.js`, `w-stock.js`, `w-ink.js`)
+
+`ROOMVIEW` owns the room scene, the station navigation and the station routing,
+and simulates nothing. Modes are
+`'room' | 'stock' | 'ink' | 'press' | 'scope'`. `enter(mode)` switches,
+`navigation(g)` draws the shared paper tags (`← ROOM`, `SOURCE`, `INKS`, `PRESS`,
+`LISTEN`, minus the current station) and records their hit regions, and `key(e)`
+owns the shortcuts (`F` source, `I` inks, `P` press, `O` listen, `Escape` room,
+`0` reset the view). `down/move/up/wheel` implement drag-to-wander and
+wheel-to-zoom (0.65x..2.8x) and forward machine gestures to `SHOPVIEW` and job
+changes to `API`; the room keeps no second copy of job state.
+
+Each station paints itself and reports its own controls; a station is a real
+function, never an alias of another screen. `STOCK_STATION.paint(ctx,W,H)` draws
+the source choices, the stock preview and the harmonics dial, and
+`INK_STATION.paint(ctx,W,H,sampleCanvas)` draws the three coverage dials, the
+fixed overprint chart and the one live sample. The sample canvas is the press's
+own overprint handed over by the app, not a copy of a sample. A source change or
+a coverage change invalidates an approved proof; neither may erase a delivered
+edition sheet or renumber the next edition.
+
+The bench writes only through state the app already owns: `AUDIO.enabled`
+(POWER), `AUDIO.mode` (PHASE, `'tone'` or `'music'`), `AUDIO.volume` (LOUDNESS),
+`R.gain` (DISPLAY GAIN) and `APP.scopeOffset` (SWEEP OFFSET). Gain and offset are
+read-only transforms of the samples: DISPLAY GAIN scales the drawn trace and
+SWEEP OFFSET moves the scan line, and neither may mutate `rec`. The scope reads
+`APP.rec`, `APP.scopeHist`, `APP.feedback` and `APP.wrldId`, and never steps a
+world.
 
 ## Verification bar
 

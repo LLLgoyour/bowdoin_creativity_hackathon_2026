@@ -1,134 +1,29 @@
 <!DOCTYPE html><html lang="en"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
 <title>the press takes commissions</title>
 <style>
-/* The rail is the shop: paper stock, ink type, and only the three inks the
-   press actually carries. Nothing here is a colour the sheet could not print. */
-:root{
-  --paper:#f3ecdd; --ink:#241a12; --blue:#1f6fc6; --pink:#ff4fb0; --yellow:#ffd21e;
-  --desk:#2b2f36;
-}
+/* +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+The page is a sheet of paper and the machine printed on it. There is no markup
+here to style: every instrument, every label and every moving part on screen is
+drawn by the workshop modules in the press's own three inks, on this paper, with the
+same halftone screens as the sheet it produces. The only thing in the body is
+the canvas the machine is printed on, one offscreen file input (the plumbing
+behind a physical hotspot - a file picker cannot be drawn), and the scripts.
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ */
+:root{ --paper:#f3ecdd; --ink:#241a12; }
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;overflow:hidden;background:var(--desk);color:var(--ink);
-  font:13px/1.45 ui-rounded,"Chalkboard SE","Comic Sans MS",system-ui,sans-serif;
-  -webkit-user-select:none;user-select:none}
-#stage{position:fixed;inset:0;display:block}
-#chip{position:fixed;top:10px;right:12px;z-index:6;padding:7px 14px;border-radius:2px;
-  background:var(--paper);color:var(--ink);border:1.5px solid var(--ink);font-weight:700;
-  cursor:pointer;letter-spacing:.1em;font-size:11px;text-transform:uppercase;
-  box-shadow:3px 3px 0 rgba(31,111,198,.9)}
-#chip:active{transform:translate(2px,2px);box-shadow:1px 1px 0 rgba(31,111,198,.9)}
-#soundchip{position:fixed;top:10px;right:112px;z-index:6;padding:7px 12px;
-  border:1.5px solid var(--ink);border-radius:2px;background:var(--paper);
-  color:var(--ink);font:700 11px ui-monospace,Menlo,monospace;cursor:pointer;
-  box-shadow:3px 3px 0 var(--pink)}
-#soundchip.on{background:var(--yellow)}
-#rail{position:fixed;top:0;left:0;bottom:0;width:306px;z-index:5;overflow-y:auto;
-  padding:14px 13px 26px;background:var(--paper);
-  border-right:1.5px solid var(--ink);box-shadow:5px 0 20px rgba(0,0,0,.42)}
-/* the shop's own registration marks, top and bottom of the rail */
-#rail:before,#rail:after{content:'';position:absolute;left:13px;right:13px;height:3px;
-  background:
-    linear-gradient(90deg,var(--blue) 0 33.33%,var(--pink) 0 66.66%,var(--yellow) 0 100%)}
-#rail:before{top:6px}#rail:after{bottom:8px}
-#rail h1{margin:10px 0 12px;font-size:17px;letter-spacing:.2em;color:var(--ink);
-  text-transform:uppercase;font-weight:800}
-#rail h1 small{display:block;margin-top:4px;font-size:10px;letter-spacing:.04em;
-  text-transform:none;font-weight:400;color:rgba(36,26,18,.66)}
-fieldset{margin:0 0 12px;padding:9px 10px 11px;border:1.2px solid rgba(36,26,18,.55);
-  border-radius:2px;background:transparent}
-legend{padding:0 6px;font:700 9.5px/1 ui-monospace,Menlo,monospace;letter-spacing:.22em;
-  color:var(--ink)}
-.chips{display:flex;flex-wrap:wrap;gap:5px}
-/* a chip is a swatch: unprinted paper until it is selected, then it takes ink */
-.chip{padding:4px 9px;border-radius:2px;border:1.2px solid var(--ink);background:transparent;
-  color:var(--ink);font-size:11px;font-weight:700;cursor:pointer}
-.chip.on{background:var(--yellow);box-shadow:2px 2px 0 var(--pink)}
-.chip:active{transform:translate(1px,1px)}
-.row{display:flex;align-items:center;gap:7px;margin:6px 0 0}
-.row label{flex:0 0 108px;font-size:10.5px;letter-spacing:.04em;color:rgba(36,26,18,.8)}
-.row input[type=range]{flex:1;min-width:0;accent-color:var(--blue)}
-.row output{flex:0 0 46px;text-align:right;font:11px ui-monospace,Menlo,monospace;
-  color:var(--ink)}
-.row select{flex:1 1 auto;margin:0 0 0 6px;padding:3px 5px;border:1.2px solid var(--ink);
-  border-radius:2px;background:var(--paper);color:var(--ink);font:inherit;font-size:11px}
-canvas.panel{display:block;width:100%;border:1.2px solid rgba(36,26,18,.55);border-radius:2px;
-  background:var(--paper);margin-top:7px}
-#note,#fnote,#wnote{font-size:11px;color:rgba(36,26,18,.82);margin:7px 0 0}
-#note b,#wnote b{color:var(--ink)}
-#wvnote{font:10.5px/1.45 ui-monospace,Menlo,monospace;color:rgba(36,26,18,.7);margin:6px 0 0}
-#sound_note{font:10.5px/1.45 ui-monospace,Menlo,monospace;color:rgba(36,26,18,.75);margin:7px 0 0}
-#life_note{font:10.5px/1.45 ui-monospace,Menlo,monospace;color:rgba(36,26,18,.75);margin:7px 0 0}
-#scope_gain,#scope_offset{display:none}
-#hudtxt{font:11.5px ui-monospace,Menlo,monospace;color:var(--ink);margin:8px 0 0;
-  letter-spacing:.02em}
-/* the ticker is chalk on the desk, not on the sheet */
-#ticker{position:fixed;left:306px;right:0;bottom:0;z-index:4;padding:5px 12px;
-  background:linear-gradient(transparent,rgba(16,18,22,.92));
-  font:11.5px ui-monospace,Menlo,monospace;color:#e7dfcd;
-  letter-spacing:.04em;text-align:center;pointer-events:none}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--paper);
+  color:var(--ink);touch-action:none;overscroll-behavior:none;
+  -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+#stage{display:block;width:100vw;height:100vh}
+/* the file picker is the one thing a canvas cannot draw. It is never shown:
+   the source desk and press feed board both open it. The source desk loads a
+   record directly; the press leaves a physical file on its feed board. */
+#f_any{position:fixed;left:-4px;top:-4px;width:1px;height:1px;opacity:0;border:0;
+  padding:0;margin:0;pointer-events:none}
 </style></head><body>
 <canvas id="stage"></canvas>
-<div id="chip">the shop</div>
-<button id="soundchip" type="button">▶ sound</button>
-<div id="ticker"></div>
-<div id="rail">
-  <h1>THE PRESS TAKES COMMISSIONS<small>hand it any file. it becomes a wave, the wave becomes a plate, four laws work the ink, and the press pulls a sheet.</small></h1>
-
-  <fieldset><legend>1 · THE COMMISSION</legend>
-    <div class="chips" id="srcs"></div>
-    <input type="file" id="f_any" hidden>
-    <input type="file" id="f_img" accept="image/*" hidden>
-    <div class="row" id="wvrow" style="display:none">
-      <label>harmonics P</label>
-      <input type="range" id="r_harm" min="1" max="1023" step="1" value="48">
-      <output id="o_harm"></output>
-    </div>
-    <div id="wvnote"></div>
-    <canvas class="panel" id="c_rec" width="272" height="118"></canvas>
-    <div id="note">drop any file — a picture, a sound, numbers — anywhere</div>
-  </fieldset>
-
-  <fieldset><legend>2 · THE PLATE</legend>
-    <div class="chips" id="flds"></div>
-    <canvas class="panel" id="c_fld" width="272" height="118"></canvas>
-    <div id="fnote" class="note"></div>
-  </fieldset>
-
-  <fieldset><legend>3 · THE LAW THAT WORKS THE INK</legend>
-    <div class="chips" id="wrlds"></div>
-    <div id="params"></div>
-    <div id="wnote" class="note"></div>
-  </fieldset>
-
-  <fieldset><legend>4 · HEAR THE WAVE</legend>
-    <div class="chips">
-      <div class="chip on" id="m_tone">strain tone</div>
-      <div class="chip" id="m_music">phase music</div>
-    </div>
-    <div class="row"><label>volume</label><input type="range" id="r_volume" min="0" max="100" step="1"><output id="o_volume"></output></div>
-    <div id="sound_note">Press ▶ sound to hear the waveform.</div>
-    <div id="life_note" style="display:none">LIFE: living cell positions reshape the wave and bend pitch, volume and stereo. The pale scope trace is the original record.</div>
-  </fieldset>
-
-  <fieldset><legend>5 · THE PULL</legend>
-    <div class="chips">
-      <div class="chip" id="b_play">⏸ hold</div>
-      <div class="chip" id="b_step">advance</div>
-      <div class="chip" id="b_reset">new pull</div>
-      <div class="chip" id="b_shake">knock the press</div>
-      <div class="chip on" id="b_scope">◉ scope on</div>
-    </div>
-    <div class="row"><label>press speed</label><input type="range" id="r_speed" min="0" max="60" step="1"><output id="o_speed"></output></div>
-    <div class="row"><label>sheet grid</label><input type="range" id="r_size" min="24" max="120" step="4"><output id="o_size"></output></div>
-    <div class="row"><label>ink pops</label><input type="range" id="r_spark" min="0" max="40" step="1"><output id="o_spark"></output></div>
-    <div class="row" id="scope_gain"><label>scope gain</label><input type="range" id="r_gain" min="0.25" max="8" step="0.25"><output id="o_gain"></output></div>
-    <div class="row" id="scope_offset"><label>sweep offset</label><input type="range" id="r_offset" min="0" max="100" step="1"><output id="o_offset"></output></div>
-    <canvas class="panel" id="c_pop" width="272" height="66"></canvas>
-    <div id="hudtxt"></div>
-  </fieldset>
-</div>
-
+<input id="f_any" type="file" aria-hidden="true" tabindex="-1">
 <!-- classic scripts, in load order: works straight off file:// -->
 <script src="src/core.js"></script>
 <script src="src/w-field.js"></script>
@@ -139,5 +34,9 @@ canvas.panel{display:block;width:100%;border:1.2px solid rgba(36,26,18,.55);bord
 <script src="src/data-gsfc.js"></script>
 <script src="src/w-sonify.js"></script>
 <script src="src/w-render.js"></script>
+<script src="src/w-shop.js"></script>
+<script src="src/w-room.js"></script>
+<script src="src/w-stock.js"></script>
+<script src="src/w-ink.js"></script>
 <script src="src/w-app.js"></script>
 </body></html>
