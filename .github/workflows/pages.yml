@@ -1,0 +1,43 @@
+name: Publish site to GitHub Pages
+
+on:
+  push:
+    branches: [site-room]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Check out project
+        uses: actions/checkout@v4
+
+      - name: Verify website files
+        run: |
+          test -s site/index.html
+          test -s site/data.js
+          test -s site/strain-worlds/index.html
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload website
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
