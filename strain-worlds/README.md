@@ -1,6 +1,8 @@
-# strain -> worlds
+# the press takes commissions
 
-A single-file browser toy that takes a numeric record and makes it *move*.
+A single-file browser toy that takes a numeric record — or any file you hand
+it — and *prints* it: the file becomes a wave, the wave becomes a plate, one of
+four local rules works the ink, and a three-colour press pulls a sheet.
 
 The previous iteration turned every record into the same picture: a distance
 matrix, thresholded into dots, run under Conway's Life. Two things were wrong
@@ -9,20 +11,25 @@ same because one transform produced one visual grammar. And Life is binary and
 memoryless: it forgets the record at generation 0, then plays out its own fixed
 catalogue of gliders.
 
-This rebuild separates the two jobs that were tangled together.
+This rebuild separates the jobs that were tangled together.
 
 ```
-record --► field --► world --► view --► paper cards
-(the data) (geometry) (a local rule) (flat arrays)
+file --► record --► field --► world --► view --► three plates --► sheet
+(commission)(a wave) (a plate) (a law)  (flat arrays)(B,P,Y)   (the pull)
 ```
 
-**The record** is data: `{re, im, t}` — a complex time series, or an image.
+**The record** is data: `{re, im, t}` — a complex time series, or an image
+traced into one, or audio turned analytic.
 **A field** is the record turned into `w*h` of geometry: amplitude, phase,
 instantaneous frequency, and a mask saying where the record actually lives.
 **A world** is a local rule that keeps reading the field every step, so the
 record stays in the dynamics instead of only seeding them.
-**A view** is what the renderer draws: one paper card per live cell, with a
-face, a stack, a flip, a lean and a starburst.
+**A view** is what the press inks: one paper card per live cell, with a face, a
+stack, a flip, a lean and a starburst.
+**The sheet** is three ink plates — blue, fluorescent pink, yellow — each
+halftoned at its own screen angle, each with its own seeded registration slip,
+multiplied together on paper. No card is ever filled with the colour it appears
+to be.
 
 Everything below is a number a script in `tools/` prints. Nothing here is
 estimated, and where a quantity has two defensible estimators, both are given.
@@ -36,6 +43,61 @@ estimated, and where a quantity has two defensible estimators, both are given.
 
     node build.mjs builds/strain-worlds.html # rebuild the demo in this folder
     node tools/embed.mjs           # regenerates src/data-gsfc.js from the .dat
+
+## The press
+
+The sheet is not a colour scheme. Three inks are laid as separate plates —
+blue `#1f6fc6` at 15°, fluorescent pink `#ff4fb0` at 75°, yellow `#ffd21e` at
+45° — each halftoned on its own screen at a 2.6 device-pixel ruling, each
+shifted by its own seeded registration error, and the sheet is the product of
+the three on `#f3ecdd` paper. `node tools/probe-press.mjs` loads the real
+renderer (not a copy of the model) and prints every number here.
+
+**A colour is separated, never chosen.** The press builds every colour it can
+physically make — 33 plate values per ink, **35,937 printable colours**, built
+once in **29.7 ms** — and separating a colour is one nearest-neighbour search
+of that gamut in CIE Lab. `#e8563f` is not a red fill; it is blue 1/32 + pink
+13/32 + yellow 11/32, and the red happens on the paper.
+
+**The separation is measured against what the app names.** An earlier
+hand-kept on/off table (each colour either prints on a plate or does not) was
+**mean dE 79.65, worst 139.39** — far enough that palette slot 0, a gold, was
+printing as magenta. The search is **mean dE 11.98 across the twelve flats**
+and **9.53 across all 44 colours** once the worlds have pushed the ones they
+invent at runtime.
+
+**Three inks cannot reach everything, and the misses are named.** 13 of 44
+colours land further than dE 15, all of them saturated greens, teals and
+violets: `#57ac4a -> #687e2c` (dE 27.71), `#3fb8a0 -> #76937e` (26.89),
+`#8a63d2 -> #76448f` (23.20), `#a9c93f -> #afa42f` (23.00),
+`#5a7fd8 -> #1e67ac` (16.93). Blue plus yellow does not make that green.
+
+**So the palette is the press's gamut.** At boot `snapPalette()` replaces every
+flat with what the inks actually lay down for it, because a shop cannot name a
+colour it cannot print. After that the chip in the rail, the proof panel and
+the pulled sheet agree to **max dE 0.4331 across all 44 colours** — the residue
+is 8-bit rounding. The cost is honest and visible: the greens became olive.
+
+**A colour the separation cannot parse prints as bare paper.** That was a real
+bug: `mixHex()` returned `rgb(r,g,b)` strings, `hex2rgb()` reads `#rrggbb`, and
+**24 of the 44** runtime colours (every LIFE rule's three derived shades) were
+separating to NaN and printing as blank sheet. `mixHex` now returns hex and the
+probe asserts both halves — 0 unparseable, 0 blank prints.
+
+**The pull is seeded and reproducible.** Registration slip, dot phase and paper
+grain are all functions of the plate seed: seed 7 always gives the same three
+offsets `(1.27,-1.18) (-0.59,-1.38) (0.54,0.32)`, and seed 8 gives different
+ones. Same board, new seed, another copy.
+
+**Nothing finer than the screen ruling is drawn.** A cut line thinner than one
+dot prints as nothing, so the card outline is clamped to the ruling and a pupil
+is never smaller than 0.78 of a dot — the rule a printer actually works to.
+
+**The sheet carries its furniture.** Crop marks at the trim, an edition stamp
+(plate, run, pull seed, sheet grid, generation) and a press-check strip of the
+three solids, their half tints and all four overprints — printed *through the
+same three plates* as the image, because a control strip that was composited
+separately would not show the registration slip it exists to reveal.
 
 ## Oscilloscope view
 
@@ -52,12 +114,12 @@ This scan is a reading of the original record: it does not
 inject a new driving signal into the world, which continues to read the complete
 mapped field each step.
 
-Use **scope on/off** in PLAY, or press **O**, to switch between the paired view
+Use **scope on/off** in THE PULL, or press **O**, to switch between the paired view
 and the original full-screen paper board. **Scope gain** changes only the
 vertical display scale of the two source traces; it never changes the samples.
 **Sweep offset** moves only the scan line, also leaving the samples unchanged.
-Pause, step, reseed and shake still work in either view. Numeric files dropped
-onto the page use the same two-channel scope; images show the world trace alone.
+Pause, step, reseed and shake still work in either view. Numeric, image, and
+audio files converted into complex waveforms also use the two-channel scope.
 
 ## Hear the strain
 
@@ -99,13 +161,35 @@ Two things about it are worth stating because code depends on them:
   `t = 49.9 .. 53.0 s`. That hairpin is why the fields keep the sign of the
   frequency and why `spectro` zooms a 4.0x band around the DFT peak.
 
-`+ file` and `+ image` run the same pipeline on anything dropped in: an image
-becomes a record at its own sample count, an audio file is decoded to mono at
-its own rate, and noise comes from the same generator the probes use. Which
-field survives that is measured rather than assumed — every field separates a
-dropped signal from noise in both directions, and `tools/probe-field.mjs` prints
-the trial counts per field, so the media path is not silently the record path
-wearing a different filename.
+## The commission
+
+Anything dropped on the page is a commission, and the press takes it by
+turning it into a wave. `tools/probe-wave.mjs` measures that path end to end.
+
+**A picture and a signal are the same object.** An image is traced to its
+silhouette contour — `tools/fish.png` gives 1024 contour points — and the
+contour is fitted as a sum of rotating vectors (an epicycle series, the DFT of
+the closed curve). The harmonics slider is the fit: sweeping P, the
+reconstruction error falls **60.145 px RMS at P=1 to 0.000 px at full P**,
+monotonically, and the silhouette IoU rises **0.4683 to 0.9980**. At the
+default P=48 the fish is 8.398 px RMS, IoU 0.9386 — recognisably a fish, made
+of 48 spinning arrows.
+
+**Audio is turned analytic, and the one inexact part is named.** A decoded
+file is mixed to mono and given its Hilbert transform, so `x + i·H(x)` is the
+record. For `x = cos(2πft)` that must be `e^{i2πft}`: on a synthesised tone the
+probe measures `RMS(im - 0.6·sin) = 0.000000000` and a flat envelope,
+`max ||x+iH(x)| - 0.6| = 0.000000000`. On the decoded 8-bit WAV the same
+measurement is **0.006479 RMS over all samples but 0.000024 over the inner
+6976**, with the worst sample 0.414263 at the very edge — the window-edge
+artefact of an FFT Hilbert transform, one sample in from the boundary, not a
+wrong transform. The probe prints both so the edge cannot hide.
+
+Noise comes from the same generator the probes use. Which field survives a
+dropped signal is measured rather than assumed — every field separates a
+dropped signal from noise in both directions, and `tools/probe-field.mjs`
+prints the trial counts per field, so the media path is not silently the record
+path wearing a different filename.
 
 ## The fields
 
@@ -285,6 +369,28 @@ births 1→0 · retreats 0→0 · V+ 0.1469` and `kick 1.00 · reef 491→491 ·
 births 2→0 · retreats 3→0 · V+ 0.1706`. None of these strings predicts a
 recovery; they report what the impulse did at the moment it landed.
 
+**How long a shake takes to heal was measured in a prototype, not shipped.**
+`prototypes/shake/` (built as `builds/sw-shake.html`) forks a structural copy
+of the board one instant before the kick and steps it in lockstep, never
+shaken, so a return is a gap closing against a matched control rather than a
+number drifting back toward a remembered one. The fork is proved exact first
+(5 seeds x 200,000 draws, 0 mismatches, 0 max abs diff) and the copy re-checked
+at 12/12 fields. On the record at 52x52, settle 400, full power, horizon 600,
+`node prototypes/shake/tools/probe-shake-return.mjs` prints
+**synch +35, grav +37, rd +164, life +96 generations**.
+
+Those four numbers are *not* a ranking, and the prototype's own claim that they
+are was not carried over. Each world returns on its own scalar at its own
+tolerance — locked cards within 5%, occupied piles within 1%, `max|dV|` within
+0.005 absolute, live cards within 20% — so +35 and +96 are answers to four
+different questions. The spread between runs is also real: across kick
+generations the same protocol gives rd 143..164 and life 29..96, which overlaps
+synch's 35. What the prototype does establish is the shape: the integer and
+geometric worlds close their gap tightly and repeatably, the float worlds are
+chaotic at the kick site, and a world can also honestly fail to return — the
+verdict string `NO RETURN WITHIN 600 GENERATIONS` is a real display, printed
+for `rd` at 120x120.
+
 ## Files
 
     shell.html          the file:// page: loads src/ as classic scripts
@@ -295,18 +401,24 @@ recovery; they report what the impulse did at the moment it landed.
     src/w-grav.js       falling-grain world
     src/w-rd.js         Gray-Scott world
     src/w-life.js       B/S world
-    src/w-render.js     paper-card renderer
-    src/w-app.js        state, controls, loop
+    src/w-render.js     the press: separation, three plates, halftone, furniture
+    src/w-app.js        the shop: state, controls, loop
     src/data-gsfc.js    generated record embed
     tools/embed.mjs     record -> src/data-gsfc.js
     tools/probe-*.mjs   one probe per module: prints the numbers quoted above
+    tools/probe-press.mjs   loads the real renderer: gamut, separation, dE, slip
+    tools/probe-wave.mjs    the commission path: contour, epicycles, Hilbert
+    tools/ink-fit.mjs   standalone ink fit; found the 79.65 dE of the old table
     tools/itest.mjs     cross-module integration test at 52x52
     CONTRACT.md         the frozen module interfaces
+    builds/             the built single files, including each prototype
+    prototypes/         the five side experiments, each a full working copy
 
 ## Verify it
 
-    for p in field synch grav rd life; do node tools/probe-$p.mjs; done
+    for p in press wave field synch grav rd life; do node tools/probe-$p.mjs; done
     node tools/itest.mjs
+    node prototypes/shake/tools/probe-shake-return.mjs
 
 `itest.mjs` loads `core.js` and every `src/w-*.js` into ONE function body the way
 the browser does, so timings match the page rather than a contextified global
