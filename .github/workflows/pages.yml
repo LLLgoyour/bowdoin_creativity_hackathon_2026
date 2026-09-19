@@ -2,7 +2,7 @@ name: Publish site to GitHub Pages
 
 on:
   push:
-    branches: [site-room]
+    branches: [master]
   workflow_dispatch:
 
 permissions:
