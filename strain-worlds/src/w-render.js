@@ -437,7 +437,7 @@ function drawStage(V,field,opts){
 }
 /* A CRT reading of the SOURCE, beside a separate trace of the WORLD. The
    scanner never changes a sample: gain and phosphor glow are display only. */
-function scopeTrace(ctx,rec,key,start,end,scan,x,y,w,h,peak,color){
+function scopeTrace(ctx,rec,key,start,end,scan,x,y,w,h,peak,color,reference){
   const values=rec[key], mid=y+h/2, amp=h*0.38*R.gain/peak;
   const plot=(last)=>{
     ctx.beginPath();
@@ -447,6 +447,10 @@ function scopeTrace(ctx,rec,key,start,end,scan,x,y,w,h,peak,color){
     }
   };
   ctx.save();ctx.beginPath();ctx.rect(x,y,w,h);ctx.clip();
+  if(reference){
+    plot(end);ctx.strokeStyle='#afc4b8';ctx.globalAlpha=0.34;ctx.lineWidth=1;
+    ctx.stroke();ctx.restore();return;
+  }
   plot(end);ctx.strokeStyle=color;ctx.globalAlpha=0.16;ctx.lineWidth=1.1;ctx.stroke();
   if(scan>=start){
     plot(Math.min(scan,end));
@@ -508,16 +512,21 @@ function drawScope(ctx,opts){
     ctx.beginPath();ctx.moveTo(left,top+j*lane);ctx.lineTo(right,top+j*lane);ctx.stroke();
   }
   ctx.font='10px ui-monospace,monospace';
-  ctx.fillStyle='#83e9ff';ctx.fillText('CH1  Re(h)',left+5,top+12);
-  ctx.fillStyle='#ffc47f';ctx.fillText('CH2  Im(h)',left+5,top+lane+12);
+  ctx.fillStyle='#83e9ff';ctx.fillText(opts.feedback?'CH1  Re: source + LIFE':'CH1  Re(h)',left+5,top+12);
+  ctx.fillStyle='#ffc47f';ctx.fillText(opts.feedback?'CH2  Im: source + LIFE':'CH2  Im(h)',left+5,top+lane+12);
   ctx.fillStyle='#9cf5ae';ctx.fillText('WORLD  '+(opts.responseLabel||'activity'),left+5,top+lane*2+12);
   if(rec&&rec.re&&rec.re.length>1){
     const n=rec.re.length,scan=Math.min(n-1,Math.max(0,opts.scan||0));
     const span=Math.min(n-1,Math.max(72,Math.round(n*0.32)));
     const start=Math.min(n-1-span,Math.max(0,scan-Math.round(span*0.58)));
     const end=start+span, peak=rec.amax||1;
-    scopeTrace(ctx,rec,'re',start,end,scan,left,top+17,chartW,lane-21,peak,'#83e9ff');
-    scopeTrace(ctx,rec,'im',start,end,scan,left,top+lane+17,chartW,lane-21,peak,'#ffc47f');
+    if(opts.feedback){
+      scopeTrace(ctx,rec,'re',start,end,scan,left,top+17,chartW,lane-21,peak,'#83e9ff',true);
+      scopeTrace(ctx,rec,'im',start,end,scan,left,top+lane+17,chartW,lane-21,peak,'#ffc47f',true);
+    }
+    const signal=opts.feedback||rec;
+    scopeTrace(ctx,signal,'re',start,end,scan,left,top+17,chartW,lane-21,peak,'#83e9ff');
+    scopeTrace(ctx,signal,'im',start,end,scan,left,top+lane+17,chartW,lane-21,peak,'#ffc47f');
     const cursor=left+(scan-start)*chartW/span;
     ctx.save();ctx.strokeStyle='rgba(255,245,181,.9)';ctx.lineWidth=1;
     ctx.shadowColor='#f8edaa';ctx.shadowBlur=10;
@@ -533,7 +542,8 @@ function drawScope(ctx,opts){
   }
   scopeResponse(ctx,opts,left,top+lane*2+17,chartW,lane-21);
   ctx.fillStyle='rgba(200,239,216,.75)';ctx.font='9px ui-monospace,monospace';
-  ctx.fillText('scan '+(opts.stride||1)+'/gen · full field drives world',left,y+h-13);
+  ctx.fillText(opts.feedback?'pale: source · bright: LIFE feedback · '+opts.feedback.live+' live cells':
+    'scan '+(opts.stride||1)+'/gen · full field drives world',left,y+h-13);
   ctx.restore();ctx.restore();
 }
 /* ── the rail panels ─────────────────────────────────────────────────────────

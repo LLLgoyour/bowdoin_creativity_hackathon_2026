@@ -4,7 +4,7 @@
    throttled pane, which is what made the previous iteration look frozen.
    ═══════════════════════════════════════════════════════════════════════════ */
 const APP = {
-  rec:null, field:null, world:null, S:null, pw:null, rng:null,
+  rec:null, feedback:null, field:null, world:null, S:null, pw:null, rng:null,
   /* the file source: APP.file is the file itself (kind, name, cached contour or
      record) and APP.wmeta the measured numbers of the wave it became */
   file:null, wmeta:null, waveP:48, actx:null,
@@ -239,7 +239,8 @@ function updateAudio(force){
   }
   const index=scopeIndex(rec);
   if(!force&&index===a.lastIndex&&a.lastMode===a.mode&&a.lastVolume===a.volume)return;
-  const v=sonifyFrame(rec,index,a.mode,a.reading);
+  const life=APP.wrldId==='life'?APP.feedback:null;
+  const v=life?sonifyLifeFrame(rec,life,index,a.mode,a.reading):sonifyFrame(rec,index,a.mode,a.reading);
   a.fund.frequency.setTargetAtTime(v.pitch,now,0.035);
   a.harm.frequency.setTargetAtTime(v.pitch*2,now,0.035);
   a.filter.frequency.setTargetAtTime(400+4200*v.brightness,now,0.06);
@@ -247,8 +248,8 @@ function updateAudio(force){
   a.master.gain.setTargetAtTime(a.volume*(0.003+0.45*Math.pow(v.level,0.85)),now,0.07);
   a.lastIndex=index;a.lastMode=a.mode;a.lastVolume=a.volume;
   $('sound_note').textContent=(a.mode==='music'?'PHASE MUSIC':'STRAIN TONE')+
-    ' · '+Math.round(v.pitch)+' Hz audible · |h| '+Math.round(v.level*100)+
-    '% · phase rate '+v.sourceHz.toFixed(3)+' Hz';
+    ' · '+Math.round(v.pitch)+' Hz audible · '+(life?'LIFE wave':'|h|')+' '+Math.round(v.level*100)+
+    '% · '+(life?life.live+' live cells · ':'')+'source phase rate '+v.sourceHz.toFixed(3)+' Hz';
 }
 function rebuild(){
   try{
@@ -290,13 +291,16 @@ function paint(){
   APP.V=V;
   APP.gen=gen;          /* the edition stamp prints the generation it pulled at */
   const rec=APP.rec&&APP.rec.re?APP.rec:null,scan=scopeIndex(rec);
+  APP.feedback=APP.wrldId==='life'&&rec&&APP.S?lifeFeedback(rec,APP.S):null;
   drawStage(V,APP.field,{dead:!!(V&&liveN===0&&gen>2),
-    what:APP.world?APP.world.label:'',size:M,rec,scan,
+    what:APP.world?APP.world.label:'',size:M,rec,feedback:APP.feedback,scan,
     stride:scopeStride(rec),response:APP.scopeHist,responseN:APP.scopeN,
-    responseLabel:APP.wrldId==='synch'?'global order r':'live / board'});
+    responseLabel:APP.wrldId==='synch'?'global order r':'live / board',
+    timeUnit:rec&&rec.timeUnit||'t'});
   if(R.scope)drawRecordPanel(rec,scan);
   drawPopPanel(APP.hist,APP.histN,liveN);
   updateHud();
+  if(AUDIO.enabled)updateAudio(true); // a shake also changes LIFE without advancing the scan
 }
 function frame(){
   const now=performance.now();
@@ -341,6 +345,7 @@ function updateNotes(){
   const f=APP.field,w=APP.world;
   $('fnote').textContent=f?f.note:'';
   $('wnote').innerHTML=(w?('<b>'+w.label+'.</b> '+(w.blurb||'')+' '+(WORLD_NOTE[w.id]||'')):'');
+  $('life_note').style.display=APP.wrldId==='life'?'block':'none';
   if(APP.rec&&APP.rec.re){
     const n=APP.rec.re.length;
     $('note').textContent=(APP.rec.name||'record')+' — '+n+' complex samples'+

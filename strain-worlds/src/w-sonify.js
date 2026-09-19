@@ -27,3 +27,60 @@ function sonifyFrame(rec,index,mode,out){
   out.noteStep=step;
   return out;
 }
+
+/* LIFE turns each live column into a complex phasor. Its vertical positions
+   set the phasor angle; neighbouring columns are averaged so isolated births
+   change a contour rather than making a single-pixel spike. The original
+   record remains the quiet backbone of the output wave. Nothing here edits it
+   or the field driving the automaton. */
+function lifeFeedback(rec,S){
+  if(!rec||!rec.re||!S||!S.st)return null;
+  const {w,h,st}=S,n=rec.re.length,peak=rec.amax||1;
+  const columnsRe=new Float64Array(w),columnsIm=new Float64Array(w);
+  let live=0;
+  for(let y=0;y<h;y++){
+    const angle=2*Math.PI*(y+0.5)/h,c=Math.cos(angle),s=Math.sin(angle);
+    for(let x=0;x<w;x++)if(st[y*w+x]){
+      columnsRe[x]+=c;columnsIm[x]+=s;live++;
+    }
+  }
+  const smoothRe=new Float64Array(w),smoothIm=new Float64Array(w);
+  let maxColumn=0,globalRe=0,globalIm=0;
+  for(let x=0;x<w;x++){
+    const left=(x+w-1)%w,right=(x+1)%w;
+    smoothRe[x]=(columnsRe[left]+2*columnsRe[x]+columnsRe[right])/4;
+    smoothIm[x]=(columnsIm[left]+2*columnsIm[x]+columnsIm[right])/4;
+    maxColumn=Math.max(maxColumn,Math.hypot(smoothRe[x],smoothIm[x]));
+    globalRe+=smoothRe[x];globalIm+=smoothIm[x];
+  }
+  const activity=clamp(Math.sqrt(live/Math.max(1,w*h*0.08)),0,1);
+  const globalMag=Math.max(1,Math.hypot(globalRe,globalIm));
+  const re=new Float64Array(n),im=new Float64Array(n);
+  for(let i=0;i<n;i++){
+    const x=i%w,textureRe=maxColumn?smoothRe[x]/maxColumn:0,
+      textureIm=maxColumn?smoothIm[x]/maxColumn:0;
+    re[i]=activity*(0.35*rec.re[i]+0.65*peak*(0.8*textureRe+0.2*globalRe/globalMag));
+    im[i]=activity*(0.35*rec.im[i]+0.65*peak*(0.8*textureIm+0.2*globalIm/globalMag));
+  }
+  const wave=prepRecord({kind:'complex',name:'LIFE feedback',re,im,t:rec.t});
+  wave.amax=peak; // a fixed scale makes a shrinking or extinct colony quieter
+  wave.live=live;wave.activity=activity;
+  return wave;
+}
+
+/* The same complex feedback wave shown by the scope controls the synth.
+   The source phase still establishes the musical idea; cell positions bend
+   pitch and pan, while the feedback wave's amplitude sets loudness. */
+function sonifyLifeFrame(rec,feedback,index,mode,out){
+  out=sonifyFrame(rec,index,mode,out);
+  if(!feedback)return out;
+  const i=clamp(index|0,0,feedback.re.length-1),peak=rec.amax||1;
+  const re=feedback.re[i]/peak,im=feedback.im[i]/peak;
+  const bend=clamp(0.5*re+0.25*im,-0.6,0.6);
+  const semitones=mode==='music'?Math.round(bend*5):bend*12;
+  out.pitch=clamp(out.pitch*Math.pow(2,semitones/12),90,1000);
+  out.level=clamp(feedback.amp[i]/peak,0,1);
+  out.pan=clamp(re,-0.75,0.75);
+  out.brightness=out.level;
+  return out;
+}

@@ -58,6 +58,7 @@ canvas.panel{display:block;width:100%;border:1.2px solid rgba(36,26,18,.55);bord
 #note b,#wnote b{color:var(--ink)}
 #wvnote{font:10.5px/1.45 ui-monospace,Menlo,monospace;color:rgba(36,26,18,.7);margin:6px 0 0}
 #sound_note{font:10.5px/1.45 ui-monospace,Menlo,monospace;color:rgba(36,26,18,.75);margin:7px 0 0}
+#life_note{font:10.5px/1.45 ui-monospace,Menlo,monospace;color:rgba(36,26,18,.75);margin:7px 0 0}
 #scope_gain,#scope_offset{display:none}
 #hudtxt{font:11.5px ui-monospace,Menlo,monospace;color:var(--ink);margin:8px 0 0;
   letter-spacing:.02em}
@@ -107,6 +108,7 @@ canvas.panel{display:block;width:100%;border:1.2px solid rgba(36,26,18,.55);bord
     </div>
     <div class="row"><label>volume</label><input type="range" id="r_volume" min="0" max="100" step="1"><output id="o_volume"></output></div>
     <div id="sound_note">Press ▶ sound to hear the waveform.</div>
+    <div id="life_note" style="display:none">LIFE: living cell positions reshape the wave and bend pitch, volume and stereo. The pale scope trace is the original record.</div>
   </fieldset>
 
   <fieldset><legend>5 · THE PULL</legend>
