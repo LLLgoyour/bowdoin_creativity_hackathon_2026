@@ -23,8 +23,15 @@ Fields and worlds never touch the DOM.
 2. **Dependency-free.** Use only globals from `core.js` (`PAL`, `INK`, `clamp`,
    `lerp`, `h2`, `mulberry32`, `mixHex`, `rr`, `decodeF64`, `newView`,
    `clearView`, `viewLive`, `defField`, `defWorld`) and JS built-ins. `PAL` is
-   shared: a module may append its own entries, but the first 12 are fixed because
-   every other world indexes them.
+   shared: a module may append its own entries, but the first 12 slots keep
+   their meaning because every other world indexes them.
+   **Palette entries are values the press owns.** Every colour must be
+   `#rrggbb` — `mixHex` returns that — because at boot the renderer separates
+   each entry into blue/pink/yellow ink coverage and rewrites `PAL[i]` to what
+   those inks actually print (`snapPalette()`). Index into `PAL`; never cache
+   the hex string you pushed, and never hand a colour in any other format: an
+   unparseable entry separates to bare paper and the card prints blank.
+   `tools/probe-press.mjs` asserts both.
 3. **Deterministic.** Same seed + same field ⇒ same frames, forever. All
    randomness comes from a `mulberry32` handed in as `rng`. Never call
    `Math.random()`.

@@ -15,8 +15,10 @@ function h2(x,y){let h=Math.imul(x|0,73856093)^Math.imul(y|0,19349663);h^=h>>>13
 function mulberry32(a){return function(){a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);
   t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
 function hex2rgb(h){return[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];}
+/* one colour format in the palette: every entry is #rrggbb, so anything that
+   reads a colour — the press separates each one into ink — can parse it */
 function mixHex(a,b,t){const A=hex2rgb(a),B=hex2rgb(b);
-  return'rgb('+Math.round(lerp(A[0],B[0],t))+','+Math.round(lerp(A[1],B[1],t))+','+Math.round(lerp(A[2],B[2],t))+')';}
+  return'#'+[0,1,2].map(i=>Math.round(lerp(A[i],B[i],t)).toString(16).padStart(2,'0')).join('');}
 function decodeF64(b64){
   const bin=(typeof atob!=='undefined')?atob(b64):Buffer.from(b64,'base64').toString('binary');
   const n=bin.length,u=new Uint8Array(n);

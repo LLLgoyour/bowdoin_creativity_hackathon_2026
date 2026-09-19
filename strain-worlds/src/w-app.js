@@ -4,7 +4,10 @@
    throttled pane, which is what made the previous iteration look frozen.
    ═══════════════════════════════════════════════════════════════════════════ */
 const APP = {
-  rec:null, field:null, world:null, S:null, pw:null, rng:null, img:null,
+  rec:null, field:null, world:null, S:null, pw:null, rng:null,
+  /* the file source: APP.file is the file itself (kind, name, cached contour or
+     record) and APP.wmeta the measured numbers of the wave it became */
+  file:null, wmeta:null, waveP:48, actx:null,
   /* path + synch: measured as the only pair that stays occupied on every board
      size. At 24x24 synch holds its whole mask (454/270/250/67 cells live on
      path/matrix/spectro/hst) while life on path, whose 79%-dense mask is
@@ -26,7 +29,12 @@ function fail(e){
 }
 window.addEventListener('error',e=>fail(e));
 
-/* ── sources ─────────────────────────────────────────────────────────────── */
+/* ── sources ───────────────────────────────────────────────────────────────
+   This variant's claim, made structural: there is no image source and no audio
+   source, only a wave source. An image becomes the epicycles of its own
+   outline, an audio file becomes its analytic signal x + i·H(x), and a text
+   file of numbers is already the record. All three arrive as {re, im, t} and
+   the four fields and the four worlds never learn which one they got. */
 function recFromGSFC(){
   /* smooth:true is the module's flag for "this record needs no reduction".
      773 samples are point-sampled by design, so without it matrix/spectro/hst
@@ -39,14 +47,26 @@ function recFromNoise(){
   const r=makeNoise(APP.seed);r.smooth=true;      /* 773 samples, same as the strain record */
   return prepRecord(r);
 }
+function fileKind(f){
+  if(/^image\//.test(f.type)||/\.(png|jpe?g|gif|webp|bmp|avif)$/i.test(f.name))return 'image';
+  if(/^audio\//.test(f.type)||/\.(wav|mp3|m4a|aac|ogg|oga|opus|flac|weba)$/i.test(f.name))return 'audio';
+  return 'text';
+}
+/* the record the selected source means right now: for an image this re-runs the
+   harmonic fit at whatever P the dial holds, from the cached contour */
+function deriveFile(){
+  const f=APP.file;
+  if(!f)return;
+  if(f.kind==='image'){
+    const raw=waveFit(f.contour,APP.waveP);
+    APP.rec=prepRecord(raw);APP.wmeta=raw.wave;
+  }else{APP.rec=f.rec;APP.wmeta=f.meta;}
+}
 function setSource(id){
   APP.srcId=id;
   if(id==='gsfc')APP.rec=recFromGSFC();
   else if(id==='noise')APP.rec=recFromNoise();
-  else if(id==='image'){
-    if(!APP.img)return;
-    APP.rec={kind:'image',name:APP.img.name||'image'};
-  }
+  else if(id==='file'&&APP.file)deriveFile();
   rebuild();
 }
 function loadTextFile(f){
@@ -56,38 +76,86 @@ function loadTextFile(f){
     try{
       const o=parseNumeric(String(r.result));
       if(!o.re.length)throw new Error('no numbers found in '+f.name);
-      APP.rec=prepRecord(o);APP.rec.name=f.name;APP.srcId='file';APP.img=null;
-      $('note').textContent=f.name+' — '+o.re.length+' samples read';
-      drawSourceChips();drawFieldChips();
-      rebuild();
+      const rec=prepRecord(o);rec.name=f.name;
+      APP.file={kind:'text',name:f.name,rec,meta:{kind:'text',file:f.name,points:o.re.length,columns:o.kind}};
+      APP.srcId='file';deriveFile();
+      syncWaveRow();drawSourceChips();drawFieldChips();rebuild();
     }catch(e){fail(e);}
   };
   r.readAsText(f);
 }
-function loadImageFile(f){
-  if(!f)return;
-  createImageBitmap(f).then(bmp=>{
-    APP.img=bmp;APP.imgName=f.name;APP.srcId='image';
-    $('note').textContent=f.name+' — '+bmp.width+'×'+bmp.height+' pixels';
-    drawSourceChips();drawFieldChips();drawParams();
-    rebuild();
-  }).catch(fail);
-}
-/* the image is re-sampled on EVERY rebuild, so changing M or resizing the window
-   cannot leave a stale field behind (a defect the old version had) */
-function imageField(W,H){
-  const bmp=APP.img;
-  const c=document.createElement('canvas');c.width=bmp.width;c.height=bmp.height;
+/* ── a picture becomes a wave, and the wave is the picture ──────────────────
+   The outline is traced once (tools/probe-wave.mjs measures the same function
+   headlessly) and cached; the P dial only re-runs the harmonic fit, so dragging
+   it costs a millisecond instead of a contour trace. */
+function traceImage(f,bmp){
+  const c=document.createElement('canvas');
+  c.width=bmp.width;c.height=bmp.height;
   const g=c.getContext('2d',{willReadFrequently:true});
   g.drawImage(bmp,0,0);
   const d=g.getImageData(0,0,c.width,c.height);
-  return fieldFromImage(d.data,c.width,c.height,W,H);
+  return waveContour({rgba:d.data,width:c.width,height:c.height,name:f.name});
+}
+function loadImageFile(f){
+  if(!f)return;
+  createImageBitmap(f).then(bmp=>{
+    const contour=traceImage(f,bmp);
+    APP.file={kind:'image',name:f.name,contour,size:bmp.width+'×'+bmp.height};
+    APP.srcId='file';deriveFile();
+    syncWaveRow();drawSourceChips();drawFieldChips();rebuild();
+  }).catch(fail);
+}
+function audioCtx(){
+  if(!APP.actx)APP.actx=new (window.AudioContext||window.webkitAudioContext)();
+  return APP.actx;
+}
+function loadAudioFile(f){
+  if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{
+    audioCtx().decodeAudioData(r.result).then(buf=>{
+      const ch=buf.numberOfChannels,n=buf.length,mix=new Float64Array(n);
+      for(let c=0;c<ch;c++){
+        const d=buf.getChannelData(c);
+        for(let i=0;i<n;i++)mix[i]+=d[i]/ch;
+      }
+      const raw=waveAudio({samples:mix,sr:buf.sampleRate,name:f.name});
+      APP.file={kind:'audio',name:f.name,rec:prepRecord(raw),meta:raw.wave,size:ch+'ch'};
+      APP.srcId='file';deriveFile();
+      syncWaveRow();drawSourceChips();drawFieldChips();rebuild();
+    }).catch(()=>fail(new Error('cannot decode '+f.name+' as audio')));
+  };
+  r.readAsArrayBuffer(f);
+}
+function loadFile(f){
+  if(!f)return;
+  const kind=fileKind(f);
+  if(kind==='image')loadImageFile(f);
+  else if(kind==='audio')loadAudioFile(f);
+  else loadTextFile(f);
+}
+/* the measured numbers of the conversion, printed next to the dial */
+function waveText(m){
+  if(m.kind==='image')
+    return 'traced the '+(m.invert?'light':'dark')+' side at level '+m.level.toFixed(4)+': '+m.loops+
+      ' traversal'+(m.loops===1?'':'s')+', '+m.crossings+' crossings, resampled to '+m.points+
+      ' points on a '+m.frame+' frame; the record is their '+m.P+' largest harmonics of '+m.maxP+
+      ' — RMS '+m.rms.toFixed(3)+' px, max '+m.max.toFixed(3)+' px, silhouette IoU '+m.iou.toFixed(4);
+  if(m.kind==='audio')
+    return m.source+' samples at '+m.sr+' Hz box-averaged by '+m.factor+' onto '+m.points+' at '+
+      m.rate.toFixed(1)+' Hz; the record is their analytic signal x + i·H(x)';
+  return m.points+' '+m.columns+' samples read straight as the complex record';
+}
+function syncWaveRow(){
+  const m=APP.wmeta,onFile=APP.srcId==='file',show=!!(onFile&&m&&m.kind==='image');
+  $('wvrow').style.display=show?'flex':'none';
+  if(show){$('r_harm').max=m.maxP;$('r_harm').value=m.P;$('o_harm').value=m.P;}
+  $('wvnote').textContent=(onFile&&m)?waveText(m):'';
 }
 
 /* ── build ───────────────────────────────────────────────────────────────── */
 function buildField(){
   if(!APP.rec){APP.field=null;return;}
-  if(APP.rec.kind==='image'){APP.field=imageField(M,M);return;}
   const F=fieldById(APP.fldId);
   if(!F)return;
   APP.field=F.build(APP.rec,M,M,APP.par.field);
@@ -121,6 +189,7 @@ function rebuild(){
     drawFieldPanel(APP.field);
     drawParams();
     updateNotes();
+    syncWaveRow();
     shakeMsg='';shakeUntil=0;APP.lastShake='';
     paint();
   }catch(e){fail(e);}
@@ -149,6 +218,7 @@ function paint(){
      cached array then shows the state from whenever it was fetched. */
   const V=(APP.world&&APP.S)?safe(()=>APP.world.view(APP.S),null):null;
   APP.V=V;
+  APP.gen=gen;          /* the edition stamp prints the generation it pulled at */
   drawStage(V,APP.field,{dead:!!(V&&liveN===0&&gen>2),
     what:APP.world?APP.world.label:'',size:M});
   drawPopPanel(APP.hist,APP.histN,liveN);
@@ -167,7 +237,7 @@ function frame(){
       for(let i=0;i<steps;i++){
         decaySpark();
         try{APP.world.step(APP.S,APP.field,APP.pw);}
-        catch(e){playing=false;$('b_play').textContent='▶ play';fail(e);break;}
+        catch(e){playing=false;$('b_play').textContent='▶ run';fail(e);break;}
         gen++;
       }
       liveN=safe(()=>APP.world.stats(APP.S),liveN)||0;
@@ -178,14 +248,14 @@ function frame(){
 }
 function updateHud(){
   if(lastErr&&$('hudtxt').textContent.startsWith('ERROR'))return;
-  $('hudtxt').style.color='#f6c344';
+  $('hudtxt').style.color='#241a12';
   const w=APP.world,extra=w?safe(()=>w.HUD(APP.S,APP.field,APP.pw),''):'';
   /* A world's HUD string is its own readout and several of them print the
      generation and the live count themselves. When one does, its string is the
      whole caption and the app's own counters stay in the stats panel rather than
      being printed twice in the same line. */
   const own=/gen\s+\d+/i.test(extra);
-  const mine='gen '+gen+' · '+liveN.toLocaleString()+' cells';
+  const mine='gen '+gen+' · '+liveN.toLocaleString()+' cards';
   $('hudtxt').textContent=own?extra:(mine+(extra?' · '+extra:''));
   const shake=(shakeUntil>performance.now()&&shakeMsg)?['SHAKE '+shakeMsg]:[];
   $('ticker').textContent=shake.concat([APP.field?APP.field.label:'',w?w.label:'',
@@ -255,16 +325,13 @@ function drawSourceChips(){
   const add=(id,lab)=>c.appendChild(chip(lab,APP.srcId===id,()=>{setSource(id);drawSourceChips();}));
   add('gsfc','GSFC strain');
   add('noise','noise');
-  if(APP.img)c.appendChild(chip((APP.imgName||'image').slice(0,12),APP.srcId==='image',()=>{setSource('image');drawSourceChips();}));
-  c.appendChild(chip('+ file',false,()=>$('f_any').click()));
-  c.appendChild(chip('+ image',false,()=>$('f_img').click()));
+  /* the third source is one chip whatever the file was: a file is a wave */
+  if(APP.file)add('file','wave from file · '+(APP.file.name||'').slice(0,14));
+  c.appendChild(chip(APP.file?'+ open another':'+ wave from file',false,()=>$('f_any').click()));
+  c.appendChild(chip('+ trace an image',false,()=>$('f_img').click()));
 }
 function drawFieldChips(){
   const c=$('flds');c.innerHTML='';
-  if(APP.rec&&APP.rec.kind==='image'){
-    c.appendChild(chip('image',true,()=>{}));
-    return;
-  }
   for(const f of FIELDS)
     c.appendChild(chip(f.label,APP.fldId===f.id,()=>{APP.fldId=f.id;drawFieldChips();drawParams();rebuild();}));
   if(!FIELDS.length)c.appendChild(chip('(field module missing)',false,()=>{}));
@@ -303,7 +370,7 @@ function selectRow(holder,label,options,get,set){
 function drawParams(){
   const h=$('params');h.innerHTML='';
   const f=fieldById(APP.fldId);
-  if(f&&f.params&&!(APP.rec&&APP.rec.kind==='image')){
+  if(f&&f.params){
     const t=document.createElement('div');t.className='chips';t.style.marginTop='7px';
     t.appendChild(chip('field: '+f.label,true,()=>{}));h.appendChild(t);
     for(const p of f.params){
@@ -389,16 +456,22 @@ function bindShake(){
   });
 }
 function bindOnce(){
-  $('f_any').addEventListener('change',e=>loadTextFile(e.target.files[0]));
+  $('f_any').addEventListener('change',e=>loadFile(e.target.files[0]));
   $('f_img').addEventListener('change',e=>loadImageFile(e.target.files[0]));
   window.addEventListener('dragover',e=>{e.preventDefault();});
   window.addEventListener('drop',e=>{
     e.preventDefault();
     const f=e.dataTransfer.files[0];if(!f)return;
-    if(/^image\//.test(f.type))loadImageFile(f);else loadTextFile(f);
+    loadFile(f);                 /* picture, sound, or numbers: all waves */
+  });
+  const hr=$('r_harm');
+  hr.addEventListener('input',()=>{
+    APP.waveP=parseInt(hr.value,10);
+    if(APP.srcId==='file'&&APP.file&&APP.file.kind==='image'){deriveFile();rebuild();}
+    else $('o_harm').value=APP.waveP;
   });
   $('b_play').addEventListener('click',()=>{
-    playing=!playing;$('b_play').textContent=playing?'⏸ pause':'▶ play';
+    playing=!playing;$('b_play').textContent=playing?'⏸ hold':'▶ run';
   });
   $('b_step').addEventListener('click',()=>{
     if(!APP.world||!APP.S)return;
@@ -444,6 +517,9 @@ function relayout(){
 (function boot(){
   try{
     if(window.innerWidth<900)$('rail').style.display='none';
+    /* the worlds have finished pushing the colours they invent, so the press
+       can align the whole palette to what it can actually print */
+    snapPalette();
     bindOnce();
     drawSourceChips();drawFieldChips();drawWorldChips();drawParams();
     if(typeof prepRecord==='function'&&typeof GSFC!=='undefined'){

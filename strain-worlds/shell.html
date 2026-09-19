@@ -1,81 +1,107 @@
 <!DOCTYPE html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>strain → worlds</title>
+<title>the press takes commissions</title>
 <style>
+/* The rail is the shop: paper stock, ink type, and only the three inks the
+   press actually carries. Nothing here is a colour the sheet could not print. */
+:root{
+  --paper:#f3ecdd; --ink:#241a12; --blue:#1f6fc6; --pink:#ff4fb0; --yellow:#ffd21e;
+  --desk:#2b2f36;
+}
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;overflow:hidden;background:#0a0f1c;color:#f6e7c8;
+html,body{margin:0;height:100%;overflow:hidden;background:var(--desk);color:var(--ink);
   font:13px/1.45 ui-rounded,"Chalkboard SE","Comic Sans MS",system-ui,sans-serif;
   -webkit-user-select:none;user-select:none}
 #stage{position:fixed;inset:0;display:block}
-#chip{position:fixed;top:10px;right:12px;z-index:6;padding:7px 14px;border-radius:999px;
-  background:#f6c344;color:#2a1a10;border:3px solid #2a1a10;font-weight:700;cursor:pointer;
-  box-shadow:0 4px 0 #120b06}
-#chip:active{transform:translateY(2px);box-shadow:0 2px 0 #120b06}
+#chip{position:fixed;top:10px;right:12px;z-index:6;padding:7px 14px;border-radius:2px;
+  background:var(--paper);color:var(--ink);border:1.5px solid var(--ink);font-weight:700;
+  cursor:pointer;letter-spacing:.1em;font-size:11px;text-transform:uppercase;
+  box-shadow:3px 3px 0 rgba(31,111,198,.9)}
+#chip:active{transform:translate(2px,2px);box-shadow:1px 1px 0 rgba(31,111,198,.9)}
 #rail{position:fixed;top:0;left:0;bottom:0;width:306px;z-index:5;overflow-y:auto;
-  padding:12px 12px 24px;background:linear-gradient(#1b2338,#141a2c);
-  border-right:5px solid #2a1a10;box-shadow:6px 0 22px rgba(0,0,0,.45)}
-#rail h1{margin:2px 0 10px;font-size:19px;letter-spacing:.14em;color:#f6c344;
-  text-shadow:2px 2px 0 #2a1a10}
-#rail h1 small{display:block;font-size:10px;letter-spacing:.06em;color:#9fb0d0;text-shadow:none}
-fieldset{margin:0 0 11px;padding:9px 10px 11px;border:3px solid #2a1a10;border-radius:13px;
-  background:rgba(255,255,255,.045)}
-legend{padding:0 6px;font-size:10px;letter-spacing:.16em;color:#f6c344}
+  padding:14px 13px 26px;background:var(--paper);
+  border-right:1.5px solid var(--ink);box-shadow:5px 0 20px rgba(0,0,0,.42)}
+/* the shop's own registration marks, top and bottom of the rail */
+#rail:before,#rail:after{content:'';position:absolute;left:13px;right:13px;height:3px;
+  background:
+    linear-gradient(90deg,var(--blue) 0 33.33%,var(--pink) 0 66.66%,var(--yellow) 0 100%)}
+#rail:before{top:6px}#rail:after{bottom:8px}
+#rail h1{margin:10px 0 12px;font-size:17px;letter-spacing:.2em;color:var(--ink);
+  text-transform:uppercase;font-weight:800}
+#rail h1 small{display:block;margin-top:4px;font-size:10px;letter-spacing:.04em;
+  text-transform:none;font-weight:400;color:rgba(36,26,18,.66)}
+fieldset{margin:0 0 12px;padding:9px 10px 11px;border:1.2px solid rgba(36,26,18,.55);
+  border-radius:2px;background:transparent}
+legend{padding:0 6px;font:700 9.5px/1 ui-monospace,Menlo,monospace;letter-spacing:.22em;
+  color:var(--ink)}
 .chips{display:flex;flex-wrap:wrap;gap:5px}
-.chip{padding:4px 9px;border-radius:9px;border:2.5px solid #2a1a10;background:#e8dfc6;
-  color:#2a1a10;font-size:11px;font-weight:700;cursor:pointer;box-shadow:0 2px 0 #120b06}
-.chip.on{background:#f6c344}
-.chip:active{transform:translateY(1px);box-shadow:0 1px 0 #120b06}
+/* a chip is a swatch: unprinted paper until it is selected, then it takes ink */
+.chip{padding:4px 9px;border-radius:2px;border:1.2px solid var(--ink);background:transparent;
+  color:var(--ink);font-size:11px;font-weight:700;cursor:pointer}
+.chip.on{background:var(--yellow);box-shadow:2px 2px 0 var(--pink)}
+.chip:active{transform:translate(1px,1px)}
 .row{display:flex;align-items:center;gap:7px;margin:6px 0 0}
-.row label{flex:0 0 108px;font-size:11px;color:#cfe0ff}
-.row input[type=range]{flex:1;min-width:0;accent-color:#f6c344}
-.row output{flex:0 0 46px;text-align:right;font-size:11px;color:#f6c344}
-.row select{flex:1 1 auto;margin:0 0 0 6px;padding:3px 5px;border:2px solid #2a1a10;
-  border-radius:8px;background:#0e1424;color:#f6c344;font:inherit;font-size:11px}
-canvas.panel{display:block;width:100%;border:3px solid #2a1a10;border-radius:11px;
-  background:#0e1424;margin-top:7px}
-#note{font-size:11px;color:#cfe0ff;margin:7px 0 0}
-#note b{color:#f6c344}
-#hudtxt{font-size:11.5px;color:#f6c344;margin:8px 0 0;letter-spacing:.03em}
+.row label{flex:0 0 108px;font-size:10.5px;letter-spacing:.04em;color:rgba(36,26,18,.8)}
+.row input[type=range]{flex:1;min-width:0;accent-color:var(--blue)}
+.row output{flex:0 0 46px;text-align:right;font:11px ui-monospace,Menlo,monospace;
+  color:var(--ink)}
+.row select{flex:1 1 auto;margin:0 0 0 6px;padding:3px 5px;border:1.2px solid var(--ink);
+  border-radius:2px;background:var(--paper);color:var(--ink);font:inherit;font-size:11px}
+canvas.panel{display:block;width:100%;border:1.2px solid rgba(36,26,18,.55);border-radius:2px;
+  background:var(--paper);margin-top:7px}
+#note,#fnote,#wnote{font-size:11px;color:rgba(36,26,18,.82);margin:7px 0 0}
+#note b,#wnote b{color:var(--ink)}
+#wvnote{font:10.5px/1.45 ui-monospace,Menlo,monospace;color:rgba(36,26,18,.7);margin:6px 0 0}
+#hudtxt{font:11.5px ui-monospace,Menlo,monospace;color:var(--ink);margin:8px 0 0;
+  letter-spacing:.02em}
+/* the ticker is chalk on the desk, not on the sheet */
 #ticker{position:fixed;left:306px;right:0;bottom:0;z-index:4;padding:5px 12px;
-  background:linear-gradient(transparent,rgba(6,9,17,.92));font-size:11.5px;color:#f6c344;
+  background:linear-gradient(transparent,rgba(16,18,22,.92));
+  font:11.5px ui-monospace,Menlo,monospace;color:#e7dfcd;
   letter-spacing:.04em;text-align:center;pointer-events:none}
 </style></head><body>
 <canvas id="stage"></canvas>
-<div id="chip">panel</div>
+<div id="chip">the shop</div>
 <div id="ticker"></div>
 <div id="rail">
-  <h1>STRAIN → WORLDS<small>one record, four ways to make it move</small></h1>
+  <h1>THE PRESS TAKES COMMISSIONS<small>hand it any file. it becomes a wave, the wave becomes a plate, four laws work the ink, and the press pulls a sheet.</small></h1>
 
-  <fieldset><legend>1 · THE RECORD</legend>
+  <fieldset><legend>1 · THE COMMISSION</legend>
     <div class="chips" id="srcs"></div>
-    <input type="file" id="f_any" accept=".txt,.dat,.csv,.tsv,.json" hidden>
+    <input type="file" id="f_any" hidden>
     <input type="file" id="f_img" accept="image/*" hidden>
+    <div class="row" id="wvrow" style="display:none">
+      <label>harmonics P</label>
+      <input type="range" id="r_harm" min="1" max="1023" step="1" value="48">
+      <output id="o_harm"></output>
+    </div>
+    <div id="wvnote"></div>
     <canvas class="panel" id="c_rec" width="272" height="118"></canvas>
-    <div id="note">drop any text file of numbers, or an image, anywhere</div>
+    <div id="note">drop any file — a picture, a sound, numbers — anywhere</div>
   </fieldset>
 
-  <fieldset><legend>2 · THE FIELD</legend>
+  <fieldset><legend>2 · THE PLATE</legend>
     <div class="chips" id="flds"></div>
     <canvas class="panel" id="c_fld" width="272" height="118"></canvas>
     <div id="fnote" class="note"></div>
   </fieldset>
 
-  <fieldset><legend>3 · THE WORLD</legend>
+  <fieldset><legend>3 · THE LAW THAT WORKS THE INK</legend>
     <div class="chips" id="wrlds"></div>
     <div id="params"></div>
     <div id="wnote" class="note"></div>
   </fieldset>
 
-  <fieldset><legend>PLAY</legend>
+  <fieldset><legend>4 · THE PULL</legend>
     <div class="chips">
-      <div class="chip" id="b_play">⏸ pause</div>
-      <div class="chip" id="b_step">step</div>
-      <div class="chip" id="b_reset">reseed</div>
-      <div class="chip" id="b_shake">shake</div>
+      <div class="chip" id="b_play">⏸ hold</div>
+      <div class="chip" id="b_step">advance</div>
+      <div class="chip" id="b_reset">new pull</div>
+      <div class="chip" id="b_shake">knock the press</div>
     </div>
-    <div class="row"><label>speed</label><input type="range" id="r_speed" min="0" max="60" step="1"><output id="o_speed"></output></div>
-    <div class="row"><label>world size</label><input type="range" id="r_size" min="24" max="120" step="4"><output id="o_size"></output></div>
-    <div class="row"><label>starbursts</label><input type="range" id="r_spark" min="0" max="40" step="1"><output id="o_spark"></output></div>
+    <div class="row"><label>press speed</label><input type="range" id="r_speed" min="0" max="60" step="1"><output id="o_speed"></output></div>
+    <div class="row"><label>sheet grid</label><input type="range" id="r_size" min="24" max="120" step="4"><output id="o_size"></output></div>
+    <div class="row"><label>ink pops</label><input type="range" id="r_spark" min="0" max="40" step="1"><output id="o_spark"></output></div>
     <canvas class="panel" id="c_pop" width="272" height="66"></canvas>
     <div id="hudtxt"></div>
   </fieldset>
