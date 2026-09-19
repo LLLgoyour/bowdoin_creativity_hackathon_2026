@@ -30,11 +30,23 @@ jobs:
         run: |
           test -s site/index.html
           test -s site/data.js
+          test -s site/strain-worlds/index.html
 
       - name: Upload website without deleting remote files
         env:
           FTP_SERVER: ${{ secrets.FTP_SERVER }}
           FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
           FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
-          FTP_SERVER_DIR: ${{ secrets.FTP_SERVER_DIR }}
+          FTP_SERVER_DIR: /automata
         run: python3 scripts/deploy_ftp.py
+
+      - name: Verify public website
+        run: |
+          status=$(curl --silent --show-error --location --max-time 30 \
+            --output /tmp/automata-home.html --write-out '%{http_code}' \
+            "https://automata.lllgoyour.com/?deploy=${GITHUB_SHA}")
+          echo "Public homepage HTTP status: ${status}"
+          if [ "${status}" != "200" ] || ! grep -q '<title>Black Hole Loom</title>' /tmp/automata-home.html; then
+            echo '::error::FTP transfer completed, but automata.lllgoyour.com is not serving site/index.html. Check that FTP_SERVER_DIR matches the subdomain Document Root in the hosting panel.'
+            exit 1
+          fi

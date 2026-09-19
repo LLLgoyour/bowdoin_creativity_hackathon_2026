@@ -1,4 +1,4 @@
-"""Upload the static site to its dedicated FTP directory, without remote deletions."""
+"""Upload the static site to the subdomain's FTP document root."""
 
 from __future__ import annotations
 
@@ -37,8 +37,8 @@ def main() -> None:
     username = required("FTP_USERNAME")
     password = required("FTP_PASSWORD")
     remote_dir = required("FTP_SERVER_DIR")
-    if remote_dir in {"/", ".", "./"} or ".." in PurePosixPath(remote_dir).parts:
-        raise SystemExit("FTP_SERVER_DIR must name a dedicated subdomain directory.")
+    if remote_dir == "/" or ".." in PurePosixPath(remote_dir).parts:
+        raise SystemExit("FTP_SERVER_DIR must be the subdomain document root, not '/'.")
 
     endpoint = urlsplit(server if "://" in server else f"ftp://{server}")
     if (endpoint.scheme != "ftp" or not endpoint.hostname
@@ -51,10 +51,18 @@ def main() -> None:
     ftp.set_pasv(True)
 
     try:
-        if remote_dir.startswith("/"):
-            ftp.cwd("/")
-        enter_directory(ftp, remote_dir)
+        login_root = ftp.pwd()
+        try:
+            ftp.cwd(remote_dir)
+        except error_perm as exc:
+            raise SystemExit(
+                "FTP_SERVER_DIR does not exist from this FTP account. "
+                "Set it to the existing Document Root shown for automata.lllgoyour.com "
+                "in your hosting panel. Use '.' only if FTP login opens in that root."
+            ) from exc
         root = ftp.pwd()
+        print(f"FTP login directory: {login_root}")
+        print(f"FTP upload directory: {root}")
 
         files = sorted(path for path in SITE.rglob("*") if path.is_file() and not path.is_symlink())
         if not files:
@@ -66,7 +74,7 @@ def main() -> None:
             with path.open("rb") as source:
                 ftp.storbinary(f"STOR {relative.name}", source)
             print(f"Uploaded {relative.as_posix()}")
-        print(f"Uploaded {len(files)} files to the configured FTP directory.")
+        print(f"Uploaded {len(files)} files to {root}.")
     finally:
         try:
             ftp.quit()
