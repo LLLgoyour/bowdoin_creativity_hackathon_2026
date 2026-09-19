@@ -139,6 +139,27 @@ or a claim about sound propagating through space. The mapping is tested by
 mapping. The interactive single-file page makes its audio live in Web Audio
 and does not need the WAV file.
 
+## LIFE feedback
+
+When **LIFE** is selected, every generation projects the living cells in each
+grid column onto a complex phasor: a cell's row sets its angle. Neighbouring
+columns are smoothed, then their pattern contributes 65% of a new wave while
+the original record contributes 35%. The strength follows the square root of
+the live cell density; an extinct board makes a flat, silent wave. The field
+and the original source record are unchanged, so the source still drives the
+automaton while its cells control the presentation in return.
+
+On the oscilloscope the pale traces show the original `Re(h)` and `Im(h)`;
+the bright traces show the changing LIFE wave on the same fixed scale. The
+sound uses that wave's amplitude for volume and filter brightness, its real
+component for stereo position, and its real and imaginary components to bend
+the source-based pitch. Phase music quantises the pitch bend to semitones.
+Pausing freezes the board and mutes sound. Stepping and shaking redraw the
+wave immediately; while playing, they also change the sound immediately.
+Other worlds retain the original data sonification.
+`node tools/probe-life-feedback.mjs` checks that changing cell positions
+changes both the displayed wave and sound controls, without editing the data.
+
 ## The record
 
 `src/data-gsfc.js` holds the GSFC QC6 strain record as base64 Float64 blocks:

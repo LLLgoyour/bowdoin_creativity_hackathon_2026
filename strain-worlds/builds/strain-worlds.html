@@ -58,6 +58,7 @@ canvas.panel{display:block;width:100%;border:1.2px solid rgba(36,26,18,.55);bord
 #note b,#wnote b{color:var(--ink)}
 #wvnote{font:10.5px/1.45 ui-monospace,Menlo,monospace;color:rgba(36,26,18,.7);margin:6px 0 0}
 #sound_note{font:10.5px/1.45 ui-monospace,Menlo,monospace;color:rgba(36,26,18,.75);margin:7px 0 0}
+#life_note{font:10.5px/1.45 ui-monospace,Menlo,monospace;color:rgba(36,26,18,.75);margin:7px 0 0}
 #scope_gain,#scope_offset{display:none}
 #hudtxt{font:11.5px ui-monospace,Menlo,monospace;color:var(--ink);margin:8px 0 0;
   letter-spacing:.02em}
@@ -107,6 +108,7 @@ canvas.panel{display:block;width:100%;border:1.2px solid rgba(36,26,18,.55);bord
     </div>
     <div class="row"><label>volume</label><input type="range" id="r_volume" min="0" max="100" step="1"><output id="o_volume"></output></div>
     <div id="sound_note">Press ▶ sound to hear the waveform.</div>
+    <div id="life_note" style="display:none">LIFE: living cell positions reshape the wave and bend pitch, volume and stereo. The pale scope trace is the original record.</div>
   </fieldset>
 
   <fieldset><legend>5 · THE PULL</legend>
@@ -2037,6 +2039,63 @@ function sonifyFrame(rec,index,mode,out){
   out.noteStep=step;
   return out;
 }
+
+/* LIFE turns each live column into a complex phasor. Its vertical positions
+   set the phasor angle; neighbouring columns are averaged so isolated births
+   change a contour rather than making a single-pixel spike. The original
+   record remains the quiet backbone of the output wave. Nothing here edits it
+   or the field driving the automaton. */
+function lifeFeedback(rec,S){
+  if(!rec||!rec.re||!S||!S.st)return null;
+  const {w,h,st}=S,n=rec.re.length,peak=rec.amax||1;
+  const columnsRe=new Float64Array(w),columnsIm=new Float64Array(w);
+  let live=0;
+  for(let y=0;y<h;y++){
+    const angle=2*Math.PI*(y+0.5)/h,c=Math.cos(angle),s=Math.sin(angle);
+    for(let x=0;x<w;x++)if(st[y*w+x]){
+      columnsRe[x]+=c;columnsIm[x]+=s;live++;
+    }
+  }
+  const smoothRe=new Float64Array(w),smoothIm=new Float64Array(w);
+  let maxColumn=0,globalRe=0,globalIm=0;
+  for(let x=0;x<w;x++){
+    const left=(x+w-1)%w,right=(x+1)%w;
+    smoothRe[x]=(columnsRe[left]+2*columnsRe[x]+columnsRe[right])/4;
+    smoothIm[x]=(columnsIm[left]+2*columnsIm[x]+columnsIm[right])/4;
+    maxColumn=Math.max(maxColumn,Math.hypot(smoothRe[x],smoothIm[x]));
+    globalRe+=smoothRe[x];globalIm+=smoothIm[x];
+  }
+  const activity=clamp(Math.sqrt(live/Math.max(1,w*h*0.08)),0,1);
+  const globalMag=Math.max(1,Math.hypot(globalRe,globalIm));
+  const re=new Float64Array(n),im=new Float64Array(n);
+  for(let i=0;i<n;i++){
+    const x=i%w,textureRe=maxColumn?smoothRe[x]/maxColumn:0,
+      textureIm=maxColumn?smoothIm[x]/maxColumn:0;
+    re[i]=activity*(0.35*rec.re[i]+0.65*peak*(0.8*textureRe+0.2*globalRe/globalMag));
+    im[i]=activity*(0.35*rec.im[i]+0.65*peak*(0.8*textureIm+0.2*globalIm/globalMag));
+  }
+  const wave=prepRecord({kind:'complex',name:'LIFE feedback',re,im,t:rec.t});
+  wave.amax=peak; // a fixed scale makes a shrinking or extinct colony quieter
+  wave.live=live;wave.activity=activity;
+  return wave;
+}
+
+/* The same complex feedback wave shown by the scope controls the synth.
+   The source phase still establishes the musical idea; cell positions bend
+   pitch and pan, while the feedback wave's amplitude sets loudness. */
+function sonifyLifeFrame(rec,feedback,index,mode,out){
+  out=sonifyFrame(rec,index,mode,out);
+  if(!feedback)return out;
+  const i=clamp(index|0,0,feedback.re.length-1),peak=rec.amax||1;
+  const re=feedback.re[i]/peak,im=feedback.im[i]/peak;
+  const bend=clamp(0.5*re+0.25*im,-0.6,0.6);
+  const semitones=mode==='music'?Math.round(bend*5):bend*12;
+  out.pitch=clamp(out.pitch*Math.pow(2,semitones/12),90,1000);
+  out.level=clamp(feedback.amp[i]/peak,0,1);
+  out.pan=clamp(re,-0.75,0.75);
+  out.brightness=out.level;
+  return out;
+}
 </script>
 <script>
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -2478,7 +2537,7 @@ function drawStage(V,field,opts){
 }
 /* A CRT reading of the SOURCE, beside a separate trace of the WORLD. The
    scanner never changes a sample: gain and phosphor glow are display only. */
-function scopeTrace(ctx,rec,key,start,end,scan,x,y,w,h,peak,color){
+function scopeTrace(ctx,rec,key,start,end,scan,x,y,w,h,peak,color,reference){
   const values=rec[key], mid=y+h/2, amp=h*0.38*R.gain/peak;
   const plot=(last)=>{
     ctx.beginPath();
@@ -2488,6 +2547,10 @@ function scopeTrace(ctx,rec,key,start,end,scan,x,y,w,h,peak,color){
     }
   };
   ctx.save();ctx.beginPath();ctx.rect(x,y,w,h);ctx.clip();
+  if(reference){
+    plot(end);ctx.strokeStyle='#afc4b8';ctx.globalAlpha=0.34;ctx.lineWidth=1;
+    ctx.stroke();ctx.restore();return;
+  }
   plot(end);ctx.strokeStyle=color;ctx.globalAlpha=0.16;ctx.lineWidth=1.1;ctx.stroke();
   if(scan>=start){
     plot(Math.min(scan,end));
@@ -2549,16 +2612,21 @@ function drawScope(ctx,opts){
     ctx.beginPath();ctx.moveTo(left,top+j*lane);ctx.lineTo(right,top+j*lane);ctx.stroke();
   }
   ctx.font='10px ui-monospace,monospace';
-  ctx.fillStyle='#83e9ff';ctx.fillText('CH1  Re(h)',left+5,top+12);
-  ctx.fillStyle='#ffc47f';ctx.fillText('CH2  Im(h)',left+5,top+lane+12);
+  ctx.fillStyle='#83e9ff';ctx.fillText(opts.feedback?'CH1  Re: source + LIFE':'CH1  Re(h)',left+5,top+12);
+  ctx.fillStyle='#ffc47f';ctx.fillText(opts.feedback?'CH2  Im: source + LIFE':'CH2  Im(h)',left+5,top+lane+12);
   ctx.fillStyle='#9cf5ae';ctx.fillText('WORLD  '+(opts.responseLabel||'activity'),left+5,top+lane*2+12);
   if(rec&&rec.re&&rec.re.length>1){
     const n=rec.re.length,scan=Math.min(n-1,Math.max(0,opts.scan||0));
     const span=Math.min(n-1,Math.max(72,Math.round(n*0.32)));
     const start=Math.min(n-1-span,Math.max(0,scan-Math.round(span*0.58)));
     const end=start+span, peak=rec.amax||1;
-    scopeTrace(ctx,rec,'re',start,end,scan,left,top+17,chartW,lane-21,peak,'#83e9ff');
-    scopeTrace(ctx,rec,'im',start,end,scan,left,top+lane+17,chartW,lane-21,peak,'#ffc47f');
+    if(opts.feedback){
+      scopeTrace(ctx,rec,'re',start,end,scan,left,top+17,chartW,lane-21,peak,'#83e9ff',true);
+      scopeTrace(ctx,rec,'im',start,end,scan,left,top+lane+17,chartW,lane-21,peak,'#ffc47f',true);
+    }
+    const signal=opts.feedback||rec;
+    scopeTrace(ctx,signal,'re',start,end,scan,left,top+17,chartW,lane-21,peak,'#83e9ff');
+    scopeTrace(ctx,signal,'im',start,end,scan,left,top+lane+17,chartW,lane-21,peak,'#ffc47f');
     const cursor=left+(scan-start)*chartW/span;
     ctx.save();ctx.strokeStyle='rgba(255,245,181,.9)';ctx.lineWidth=1;
     ctx.shadowColor='#f8edaa';ctx.shadowBlur=10;
@@ -2574,7 +2642,8 @@ function drawScope(ctx,opts){
   }
   scopeResponse(ctx,opts,left,top+lane*2+17,chartW,lane-21);
   ctx.fillStyle='rgba(200,239,216,.75)';ctx.font='9px ui-monospace,monospace';
-  ctx.fillText('scan '+(opts.stride||1)+'/gen · full field drives world',left,y+h-13);
+  ctx.fillText(opts.feedback?'pale: source · bright: LIFE feedback · '+opts.feedback.live+' live cells':
+    'scan '+(opts.stride||1)+'/gen · full field drives world',left,y+h-13);
   ctx.restore();ctx.restore();
 }
 /* ── the rail panels ─────────────────────────────────────────────────────────
@@ -2666,7 +2735,7 @@ function drawPopPanel(hist,histN,live){
    throttled pane, which is what made the previous iteration look frozen.
    ═══════════════════════════════════════════════════════════════════════════ */
 const APP = {
-  rec:null, field:null, world:null, S:null, pw:null, rng:null,
+  rec:null, feedback:null, field:null, world:null, S:null, pw:null, rng:null,
   /* the file source: APP.file is the file itself (kind, name, cached contour or
      record) and APP.wmeta the measured numbers of the wave it became */
   file:null, wmeta:null, waveP:48, actx:null,
@@ -2901,7 +2970,8 @@ function updateAudio(force){
   }
   const index=scopeIndex(rec);
   if(!force&&index===a.lastIndex&&a.lastMode===a.mode&&a.lastVolume===a.volume)return;
-  const v=sonifyFrame(rec,index,a.mode,a.reading);
+  const life=APP.wrldId==='life'?APP.feedback:null;
+  const v=life?sonifyLifeFrame(rec,life,index,a.mode,a.reading):sonifyFrame(rec,index,a.mode,a.reading);
   a.fund.frequency.setTargetAtTime(v.pitch,now,0.035);
   a.harm.frequency.setTargetAtTime(v.pitch*2,now,0.035);
   a.filter.frequency.setTargetAtTime(400+4200*v.brightness,now,0.06);
@@ -2909,8 +2979,8 @@ function updateAudio(force){
   a.master.gain.setTargetAtTime(a.volume*(0.003+0.45*Math.pow(v.level,0.85)),now,0.07);
   a.lastIndex=index;a.lastMode=a.mode;a.lastVolume=a.volume;
   $('sound_note').textContent=(a.mode==='music'?'PHASE MUSIC':'STRAIN TONE')+
-    ' · '+Math.round(v.pitch)+' Hz audible · |h| '+Math.round(v.level*100)+
-    '% · phase rate '+v.sourceHz.toFixed(3)+' Hz';
+    ' · '+Math.round(v.pitch)+' Hz audible · '+(life?'LIFE wave':'|h|')+' '+Math.round(v.level*100)+
+    '% · '+(life?life.live+' live cells · ':'')+'source phase rate '+v.sourceHz.toFixed(3)+' Hz';
 }
 function rebuild(){
   try{
@@ -2952,13 +3022,16 @@ function paint(){
   APP.V=V;
   APP.gen=gen;          /* the edition stamp prints the generation it pulled at */
   const rec=APP.rec&&APP.rec.re?APP.rec:null,scan=scopeIndex(rec);
+  APP.feedback=APP.wrldId==='life'&&rec&&APP.S?lifeFeedback(rec,APP.S):null;
   drawStage(V,APP.field,{dead:!!(V&&liveN===0&&gen>2),
-    what:APP.world?APP.world.label:'',size:M,rec,scan,
+    what:APP.world?APP.world.label:'',size:M,rec,feedback:APP.feedback,scan,
     stride:scopeStride(rec),response:APP.scopeHist,responseN:APP.scopeN,
-    responseLabel:APP.wrldId==='synch'?'global order r':'live / board'});
+    responseLabel:APP.wrldId==='synch'?'global order r':'live / board',
+    timeUnit:rec&&rec.timeUnit||'t'});
   if(R.scope)drawRecordPanel(rec,scan);
   drawPopPanel(APP.hist,APP.histN,liveN);
   updateHud();
+  if(AUDIO.enabled)updateAudio(true); // a shake also changes LIFE without advancing the scan
 }
 function frame(){
   const now=performance.now();
@@ -3003,6 +3076,7 @@ function updateNotes(){
   const f=APP.field,w=APP.world;
   $('fnote').textContent=f?f.note:'';
   $('wnote').innerHTML=(w?('<b>'+w.label+'.</b> '+(w.blurb||'')+' '+(WORLD_NOTE[w.id]||'')):'');
+  $('life_note').style.display=APP.wrldId==='life'?'block':'none';
   if(APP.rec&&APP.rec.re){
     const n=APP.rec.re.length;
     $('note').textContent=(APP.rec.name||'record')+' — '+n+' complex samples'+
