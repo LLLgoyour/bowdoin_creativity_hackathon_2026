@@ -1,55 +1,23 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    w-render.js — the paper-craft renderer. DOM side (with w-app.js).
-   Draws the board, the cards, and the three rail panels. It knows nothing
+   Draws the sheet and its cards. It knows nothing
    about any particular world: a world hands over a view, the renderer draws
    exactly one card per live cell and nothing else.
    ═══════════════════════════════════════════════════════════════════════════ */
-const R = { W:0, H:0, railW:306, side:0, bx:0, by:0, M:52, cs:11, clock:0, bob:1,
-            sparkBudget:8, scope:true, gain:1.75, sx:0, sy:0, sw:0, sh:0 };
-const BASE = 12;   /* worlds may push extra colours onto PAL; panels use only these */
+const R = { W:0, H:0, side:0, bx:0, by:0, M:52, cs:11, clock:0, bob:1,
+            sparkBudget:8, slipScale:1, inkKey:[1,1,1], gain:1.75 };
 
 function stageCtx(){
   const cv=document.getElementById('stage');
   const dpr=Math.min(2,window.devicePixelRatio||1);
   const W=window.innerWidth,H=window.innerHeight;
+  R.W=W;R.H=H;
   const w=Math.max(1,Math.round(W*dpr)),h=Math.max(1,Math.round(H*dpr));
   if(cv.width!==w||cv.height!==h){cv.width=w;cv.height=h;}
   cv.style.width=W+'px';cv.style.height=H+'px';
   const ctx=cv.getContext('2d');
   ctx.setTransform(dpr,0,0,dpr,0,0);
   return ctx;
-}
-/* "the rail is on screen" is a display question, not a width question: the
-   panel chip can open the rail at any width, and the board must give up the
-   space when it does. The boot code decides the initial display separately. */
-function railVisible(){
-  const r=document.getElementById('rail');
-  return getComputedStyle(r).display!=='none';
-}
-/* geometry only; the app owns M and calls setM */
-function layout(){
-  R.W=window.innerWidth;R.H=window.innerHeight;
-  R.railW=railVisible()?document.getElementById('rail').offsetWidth:0;
-  const availW=Math.max(140,R.W-R.railW-18), availH=Math.max(140,R.H-34);
-  if(R.scope&&availW>=760&&availH>=450){
-    R.side=Math.min(availH,availW*0.55);
-    R.bx=R.railW+12;
-    R.by=Math.max(6,(R.H-R.side)/2-8);
-    R.sx=R.bx+R.side+18;R.sy=R.by;
-    R.sw=Math.max(150,R.W-R.sx-12);R.sh=R.side;
-  }else if(R.scope){
-    R.side=Math.min(availW,Math.max(140,availH*0.52));
-    R.bx=R.railW+Math.max(0,(availW-R.side)/2);
-    R.by=8;
-    R.sx=R.railW+12;R.sy=R.by+R.side+12;
-    R.sw=Math.max(140,R.W-R.sx-12);R.sh=Math.max(120,R.H-R.sy-26);
-  }else{
-    R.side=Math.min(availW,availH);
-    R.bx=R.railW+Math.max(0,(availW-R.side)/2);
-    R.by=Math.max(6,(R.H-R.side)/2-8);
-  }
-  document.getElementById('ticker').style.left=R.railW+'px';
-  return clamp(Math.round(R.side/11/4)*4,24,120);      /* the M that makes a ~11px card */
 }
 function setM(M){R.M=M;R.cs=R.side/M;}
 
@@ -189,9 +157,33 @@ function snapPalette(){
 function printSeed(){
   return (typeof APP!=='undefined'&&APP&&APP.seed!=null)?(APP.seed|0):1;
 }
+/* Registration is something the operator brings in at makeready, not a fixed
+   property of the press: R.slipScale multiplies every plate's slip, so 0 is a
+   press that is somehow in register (or a shop that has not started yet) and 3
+   is a sheet to throw away. The seeded draw is unchanged, so scaling the slip
+   never changes which way each plate went out. */
 function slips(seed){
-  const r=mulberry32(seed^0x9e37c1);
-  return INKS.map(()=>({dx:(r()*2-1)*2.1,dy:(r()*2-1)*2.1}));
+  const r=mulberry32(seed^0x9e37c1), s=R.slipScale==null?1:R.slipScale;
+  /* s is one number for the whole press, or one PER PLATE: the operator's three
+     register pins each walk their own plate, so the shop asks for three. The
+     seeded draw is unchanged either way — scaling the slip never changes which
+     way each plate went out. */
+  return INKS.map((ink,p)=>{
+    const sp=(s&&s.length)?(s[p]==null?1:s[p]):s;
+    return {dx:(r()*2-1)*2.1*sp,dy:(r()*2-1)*2.1*sp};
+  });
+}
+/* The registration error actually in force, in device pixels: the largest
+   distance between any two of the three plates. This is the number the proof
+   prints and the operator reads off the registration targets — one number for
+   "how far out is this sheet", not six offsets. */
+function measuredSlip(seed){
+  const sl=slips(seed==null?printSeed():seed|0);
+  let worst=0;
+  for(let i=0;i<sl.length;i++)
+    for(let j=i+1;j<sl.length;j++)
+      worst=Math.max(worst,Math.hypot(sl[i].dx-sl[j].dx,sl[i].dy-sl[j].dy));
+  return worst;
 }
 function plates(side){
   if(!R._pl||R._pl.side!==side){
@@ -268,41 +260,57 @@ function inkCards(pc,V,M,cs){
    Per-pixel rather than per-dot: for each pixel find its screen cell at that
    plate's angle, read the plate's coverage at the cell centre, and ink the
    pixel if it falls inside a dot of radius sqrt(coverage). */
+/* Screen centres only move when a register pin or sheet size changes. Keep
+   one map per plate, not per seed or frame; old maps are replaced in place.
+   Float64 preserves the original dot-boundary decisions exactly. */
+function screenMap(S,p,sl){
+  const maps=R._screens||(R._screens=[]);
+  let m=maps[p];
+  if(m&&m.S===S&&m.dx===sl.dx&&m.dy===sl.dy)return m;
+  if(!m||m.S!==S)m=maps[p]={S:S,index:new Int32Array(S*S),distance:new Float64Array(S*S)};
+  m.dx=sl.dx;m.dy=sl.dy;
+  const ca=Math.cos(INKS[p].ang),sa=Math.sin(INKS[p].ang),cx=S/2,cy=S/2;
+  for(let y=0,i=0;y<S;y++)for(let x=0;x<S;x++,i++){
+    const fx=x-sl.dx-cx,fy=y-sl.dy-cy;
+    const u=fx*ca+fy*sa,v=-fx*sa+fy*ca;
+    const su=Math.round(u/DOT)*DOT,sv=Math.round(v/DOT)*DOT;
+    const sx=su*ca-sv*sa+cx+sl.dx,sy=su*sa+sv*ca+cy+sl.dy;
+    const gx=sx|0,gy=sy|0,dx=x-sx,dy=y-sy;
+    m.index[i]=gx<0||gy<0||gx>=S||gy>=S?-1:(gy*S+gx)*4;
+    m.distance[i]=dx*dx+dy*dy;
+  }
+  return m;
+}
 function pullSheet(ctx,side,ox,oy,seed){
   const S=Math.max(1,Math.round(side));
   const pc=plates(S), sl=slips(seed);
   const cov=[];
   for(let p=0;p<3;p++)cov.push(pc[p].getContext('2d').getImageData(0,0,S,S).data);
-  const out=ctx.createImageData(S,S), od=out.data;
-  const cx=S/2, cy=S/2;
+  let buf=R._sheet;
+  if(!buf||buf.S!==S)buf=R._sheet={S:S,out:ctx.createImageData(S,S),grain:new Float64Array(S*S)};
+  if(buf.seed!==seed){
+    const gr=mulberry32(seed^0x51ed27);
+    for(let i=0;i<buf.grain.length;i++)buf.grain[i]=(gr()*2-1)*9;
+    buf.seed=seed;
+  }
+  const out=buf.out,od=out.data;
   for(let i=0,px=0;px<S*S;px++){
     od[i++]=PAPER[0];od[i++]=PAPER[1];od[i++]=PAPER[2];od[i++]=255;
   }
   for(let p=0;p<3;p++){
-    const ca=Math.cos(INKS[p].ang), sa=Math.sin(INKS[p].ang), d=cov[p];
-    const ir=INKS[p].hex[0]/255, ig=INKS[p].hex[1]/255, ib=INKS[p].hex[2]/255;
-    for(let y=0;y<S;y++){
-      for(let x=0;x<S;x++){
-        const fx=x-sl[p].dx-cx, fy=y-sl[p].dy-cy;
-        const u=fx*ca+fy*sa, v=-fx*sa+fy*ca;
-        const iu=Math.round(u/DOT), iv=Math.round(v/DOT);
-        const su=iu*DOT, sv=iv*DOT;
-        const sx=su*ca-sv*sa+cx+sl[p].dx, sy=su*sa+sv*ca+cy+sl[p].dy;
-        const gx=sx|0, gy=sy|0;
-        if(gx<0||gy<0||gx>=S||gy>=S)continue;
-        const c=d[(gy*S+gx)*4]/255;
-        if(c<=0.03)continue;
-        const rr2=c*DOT*DOT*0.66, dx=x-sx, dy=y-sy;
-        if(dx*dx+dy*dy>rr2)continue;
-        const o=(y*S+x)*4;
-        od[o]=od[o]*ir; od[o+1]=od[o+1]*ig; od[o+2]=od[o+2]*ib;
-      }
+    const d=cov[p],map=screenMap(S,p,sl[p]),key=R.inkKey?R.inkKey[p]:1;
+    const ir=INKS[p].hex[0]/255,ig=INKS[p].hex[1]/255,ib=INKS[p].hex[2]/255;
+    for(let i=0,o=0;i<map.index.length;i++,o+=4){
+      const at=map.index[i];
+      if(at<0)continue;
+      const c=(d[at]/255)*key;
+      if(c<=0.03||map.distance[i]>c*DOT*DOT*0.66)continue;
+      od[o]=od[o]*ir;od[o+1]=od[o+1]*ig;od[o+2]=od[o+2]*ib;
     }
   }
   /* paper grain, seeded: the sheet's own fibre, over the ink */
-  const gr=mulberry32(seed^0x51ed27);
   for(let o=0;o<od.length;o+=4){
-    const n=(gr()*2-1)*9;
+    const n=buf.grain[o/4];
     od[o]=od[o]+n<0?0:(od[o]+n>255?255:od[o]+n);
     od[o+1]=od[o+1]+n<0?0:(od[o+1]+n>255?255:od[o+1]+n);
     od[o+2]=od[o+2]+n<0?0:(od[o+2]+n>255?255:od[o+2]+n);
@@ -327,6 +335,26 @@ function cropMarks(pc,x0,y0,inner,k){
     g.stroke();g.globalAlpha=1;
   }
 }
+/* Registration targets, at the four midpoints of the trim edge. Every plate
+   prints the same circle-and-cross; each plate is slipped by its own seeded
+   error, so a misregistered sheet shows them as coloured fringes and a
+   registered one shows a single black mark. They are the operator's instrument
+   during makeready, so they are sized off the screen ruling rather than off
+   taste: a mark thinner than one dot halftones away to nothing. */
+function regTargets(pc,x0,y0,inner,k){
+  const r=Math.max(DOT*2,5.5*k), lw=Math.max(DOT,1.4*k), arm=r*1.6;
+  const at=[[x0+inner*0.5,y0],[x0+inner,y0+inner*0.5],
+            [x0+inner*0.5,y0+inner],[x0,y0+inner*0.5]];
+  for(let p=0;p<3;p++){
+    const g=pc[p];g.globalAlpha=0.95;g.lineWidth=lw;g.beginPath();
+    for(const [cx,cy] of at){
+      g.moveTo(cx+r,cy);g.arc(cx,cy,r,0,6.2832);
+      g.moveTo(cx-arm,cy);g.lineTo(cx+arm,cy);
+      g.moveTo(cx,cy-arm);g.lineTo(cx,cy+arm);
+    }
+    g.stroke();g.globalAlpha=1;
+  }
+}
 /* the press-check strip: each ink alone, each ink at half tint, then the three
    overprints. Reading left to right you can see every colour this press can
    make and exactly how far the plates have slipped. */
@@ -343,24 +371,83 @@ function checkStrip(pc,x0,y,w,hgt,k){
   }
 }
 /* the stamp is set to the width it has been given: a sheet whose edition line
-   runs off the trim is a misprint, not a style */
-function stampText(pc,x,y,txt,px,maxW){
+   runs off the trim is a misprint, not a style. `align` is optional ('start'
+   is the default a footer wants); a centred line is used where the sheet has
+   nothing else on that edge to line up with. `bold` is for the slug that
+   shares the band with the stamp. */
+function stampText(pc,x,y,txt,px,maxW,align,bold){
   const m=pc[0];
   let size=px;
   for(;;){
-    m.font=size+'px ui-monospace,Menlo,monospace';
+    m.font=(bold?'bold ':'')+size+'px ui-monospace,Menlo,monospace';
     if(size<=6||m.measureText(txt).width<=maxW)break;
     size-=0.5;
   }
   for(let p=0;p<3;p++){
     const g=pc[p];g.globalAlpha=0.9;
-    g.font=size+'px ui-monospace,Menlo,monospace';
-    g.fillText(txt,x,y);g.globalAlpha=1;
+    g.font=(bold?'bold ':'')+size+'px ui-monospace,Menlo,monospace';
+    if(align)g.textAlign=align;
+    g.fillText(txt,x,y);g.globalAlpha=1;g.textAlign='left';
+  }
+  return size;
+}
+/* One line, one size. A proof's band has more to say than a makeready sheet's
+   (the slug and the registration error), and setting the slug off a fixed
+   multiple of the margin while the stamp shrinks to fit would leave a footer
+   whose label is three times its own text. So the size is solved once, for the
+   two of them together, and the slug is only set apart by being bold. */
+function bandSize(pc,slug,line,px,maxW){
+  const m=pc[0];
+  let size=px;
+  for(;;){
+    m.font='bold '+size+'px ui-monospace,Menlo,monospace';
+    const sw=m.measureText(slug).width+size*0.5;
+    m.font=size+'px ui-monospace,Menlo,monospace';
+    if(size<=6||sw+m.measureText(line).width<=maxW)break;
+    size-=0.5;
+  }
+  return size;
+}
+/* A makeready sheet is scrap, and it says so across its own face. The slug is
+   printed through all three plates like every other mark on the sheet, for the
+   same reason the check strip is: even the notice that this is not an edition
+   has to show the registration slip. Low alpha, or the scrap would read as the
+   picture. */
+function makereadySlug(pc,cx,cy,inner){
+  const txt='MAKEREADY - NOT FOR EDITION';
+  const m=pc[0], diag=inner*Math.SQRT2;
+  let size=Math.max(10,Math.round(inner*0.09));
+  for(;;){
+    m.font='bold '+size+'px ui-monospace,Menlo,monospace';
+    if(size<=10||m.measureText(txt).width<=diag*0.86)break;
+    size--;
+  }
+  for(let p=0;p<3;p++){
+    const g=pc[p];
+    g.save();
+    g.globalAlpha=0.24;
+    g.translate(cx,cy);g.rotate(-Math.PI/4);
+    g.font='bold '+size+'px ui-monospace,Menlo,monospace';
+    g.textAlign='center';g.textBaseline='middle';
+    g.fillText(txt,0,0);
+    g.restore();
   }
 }
 /* ── the board ───────────────────────────────────────────────────────────── */
+/* The furniture on the sheet is a function of the workflow state, because that
+   is the only way to teach what the furniture is for: a makeready sheet is
+   visibly misregistered scrap, a proof carries every instrument the operator
+   has, and an approved edition pull is trimmed clean and carries nothing but
+   the line that says which pull it is. `opts.mode`:
+     'makeready'  crop marks + check strip + stamp + the diagonal scrap slug
+     'proof'      the same, PLUS registration targets, a PROOF slug and the
+                  registration error in the stamp
+     'edition'    trimmed: smaller margin, no marks at all, one line at the foot
+   Default 'proof', so a caller that has not been rewired yet still gets a
+   sheet that shows its own registration. */
 function drawStage(V,field,opts){
   opts=opts||{};
+  const mode=opts.mode==='makeready'?'makeready':(opts.mode==='edition'?'edition':'proof');
   const ctx=stageCtx(),W=R.W,H=R.H,side=R.side,bx=R.bx,by=R.by,M=R.M;
   const seed=printSeed();
   /* the sheet is composited with putImageData, which ignores the context's
@@ -369,8 +456,9 @@ function drawStage(V,field,opts){
   ctx.fillStyle='#2b2f36';ctx.fillRect(0,0,W,H);      /* the desk under the sheet */
   const S=Math.max(1,Math.round(side*k));
   /* the image sits inside a trim margin, because the furniture needs a margin
-     to live in — the same reason a printed sheet is bigger than its image */
-  const mg=Math.round(S*0.072), inner=S-mg*2, cs=inner/M;
+     to live in — the same reason a printed sheet is bigger than its image. An
+     edition pull is already trimmed, so it gives the margin back to the image. */
+  const mg=Math.round(S*(mode==='edition'?0.022:0.072)), inner=S-mg*2, cs=inner/M;
   const pc=plates(S).map(c=>{
     const g=c.getContext('2d');
     g.setTransform(1,0,0,1,0,0);
@@ -413,217 +501,69 @@ function drawStage(V,field,opts){
     }
   }
   pc.forEach(g=>g.setTransform(1,0,0,1,0,0));
-  cropMarks(pc,mg,mg,inner,k);
-  /* the bottom margin carries one line of furniture: the edition stamp on the
-     left, the press-check strip hard against the right trim mark */
-  const bandH=mg*0.34, bandY=Math.round(S-mg*0.80);
-  const stripW=Math.round(inner*0.38), stripX=mg+inner-stripW;
-  checkStrip(pc,stripX,bandY,stripW,bandH,k);
   const A=(typeof APP!=='undefined'&&APP)?APP:null;
-  const stamp=[
-    'PLATE '+((A&&A.field&&A.field.label)||'—'),
-    'RUN '+((A&&A.world&&A.world.label)||'—'),
-    'PULL '+seed,
-    M+'x'+M,
-    'GEN '+((A&&A.gen!=null)?A.gen:0)
-  ].join(' · ');
-  stampText(pc,mg,bandY+bandH*0.82,stamp,Math.max(7,mg*0.30),stripX-mg-8*k);
+  const plate=(A&&A.field&&A.field.label)||'—';
+  const bandH=mg*0.34, bandY=Math.round(S-mg*0.80), bandBase=bandY+bandH*0.82;
+  if(mode==='edition'){
+    /* a delivered pull is trimmed: no crop marks, no check strip, no targets.
+       All that is left is one line at the foot saying which pull this is. */
+    const e=opts.edition||{}, n=e.n==null?1:e.n, N=e.N==null?1:e.N;
+    stampText(pc,mg+inner*0.5,Math.round(S-mg*0.34),
+              n+'/'+N+' · PLATE '+plate+' · PULL '+seed,
+              Math.max(7,mg*0.62),inner-8*k,'center');
+  }else{
+    cropMarks(pc,mg,mg,inner,k);
+    /* the bottom margin carries one line of furniture: the stamp on the left,
+       the press-check strip hard against the right trim mark */
+    const stripW=Math.round(inner*0.38), stripX=mg+inner-stripW;
+    checkStrip(pc,stripX,bandY,stripW,bandH,k);
+    let stampX=mg, stampW=stripX-mg-8*k;
+    const stamp=[
+      'PLATE '+plate,
+      'RUN '+((A&&A.world&&A.world.label)||'—'),
+      'PULL '+seed,
+      M+'x'+M,
+      'GEN '+((A&&A.gen!=null)?A.gen:0)
+    ].join(' · ');
+    const line=mode==='proof'?stamp+' · REG '+measuredSlip(seed).toFixed(2)+'px':stamp;
+    if(mode==='proof'){
+      /* the proof is the sheet that carries every instrument: the targets the
+         operator reads, the slug that says this is not yet an edition, and the
+         registration error the sheet is actually out by */
+      const size=bandSize(pc,'PROOF',line,Math.max(7,mg*0.30),stampW);
+      const m=pc[0];
+      m.font='bold '+size+'px ui-monospace,Menlo,monospace';
+      const slugW=m.measureText('PROOF').width+size*0.5;
+      stampText(pc,mg,bandBase,'PROOF',size,slugW,undefined,true);
+      stampX+=slugW;stampW-=slugW;
+      regTargets(pc,mg,mg,inner,k);
+    }
+    stampText(pc,stampX,bandBase,line,Math.max(7,mg*0.30),stampW);
+  }
+  if(mode==='makeready')makereadySlug(pc,S/2,S/2,inner);
   pullSheet(ctx,S,Math.round(bx*k),Math.round(by*k),seed);
   ctx.save();ctx.translate(bx,by);                    /* the sheet's cut edge */
   ctx.strokeStyle='rgba(40,30,20,.45)';ctx.lineWidth=1;
   ctx.strokeRect(0.5,0.5,Math.round(side)-1,Math.round(side)-1);
   ctx.restore();
-  if(R.scope)drawScope(ctx,opts);
 }
-/* A CRT reading of the SOURCE, beside a separate trace of the WORLD. The
-   scanner never changes a sample: gain and phosphor glow are display only. */
-function scopeTrace(ctx,rec,key,start,end,scan,x,y,w,h,peak,color,reference){
-  const values=rec[key], mid=y+h/2, amp=h*0.38*R.gain/peak;
-  const plot=(last)=>{
-    ctx.beginPath();
-    for(let i=start;i<=last;i++){
-      const px=x+(i-start)*w/(end-start),py=mid-values[i]*amp;
-      if(i===start)ctx.moveTo(px,py);else ctx.lineTo(px,py);
-    }
-  };
-  ctx.save();ctx.beginPath();ctx.rect(x,y,w,h);ctx.clip();
-  if(reference){
-    plot(end);ctx.strokeStyle='#afc4b8';ctx.globalAlpha=0.34;ctx.lineWidth=1;
-    ctx.stroke();ctx.restore();return;
-  }
-  plot(end);ctx.strokeStyle=color;ctx.globalAlpha=0.16;ctx.lineWidth=1.1;ctx.stroke();
-  if(scan>=start){
-    plot(Math.min(scan,end));
-    const glow=ctx.createLinearGradient(x,0,x+w,0);
-    glow.addColorStop(0,color+'44');glow.addColorStop(1,color);
-    ctx.globalAlpha=0.85;ctx.strokeStyle=glow;ctx.lineWidth=1.8;
-    ctx.shadowColor=color;ctx.shadowBlur=13;ctx.stroke();
-    ctx.shadowBlur=0;ctx.stroke();
-  }
-  ctx.restore();
-}
-function scopeResponse(ctx,opts,x,y,w,h){
-  const hist=opts.response,n=Math.min(opts.responseN||0,hist?hist.length:0);
-  if(!n)return;
-  let lo=1,hi=0;
-  for(let j=0;j<n;j++){
-    const v=hist[(opts.responseN-n+j)%hist.length];
-    if(v<lo)lo=v;if(v>hi)hi=v;
-  }
-  const pad=Math.max(0.025,(hi-lo)*0.18);
-  lo=Math.max(0,lo-pad);hi=Math.min(1,hi+pad);
-  if(hi-lo<0.06){lo=Math.max(0,lo-0.03);hi=Math.min(1,hi+0.03);}
-  ctx.save();ctx.beginPath();ctx.rect(x,y,w,h);ctx.clip();
-  ctx.beginPath();
-  for(let j=0;j<n;j++){
-    const v=hist[(opts.responseN-n+j)%hist.length];
-    const px=x+j*w/Math.max(1,n-1),py=y+h-(v-lo)*h/Math.max(0.001,hi-lo);
-    if(j)ctx.lineTo(px,py);else ctx.moveTo(px,py);
-  }
-  ctx.strokeStyle='#9cf5ae';ctx.lineWidth=1.7;
-  ctx.shadowColor='#69ff9a';ctx.shadowBlur=12;ctx.stroke();ctx.restore();
-  ctx.fillStyle='#9cf5ae';ctx.font='10px ui-monospace,monospace';
-  ctx.fillText((hist[(opts.responseN-1)%hist.length]*100).toFixed(1)+'%',x+w-55,y+12);
-}
-function drawScope(ctx,opts){
-  const {sx:x,sy:y,sw:w,sh:h}=R;
-  if(w<100||h<100)return;
-  ctx.save();
-  ctx.fillStyle='rgba(0,0,0,.55)';rr(ctx,x+7,y+10,w,h,18);ctx.fill();
-  const glass=ctx.createLinearGradient(x,y,x+w,y+h);
-  glass.addColorStop(0,'#102524');glass.addColorStop(1,'#03100f');
-  ctx.fillStyle=glass;rr(ctx,x,y,w,h,18);ctx.fill();
-  ctx.strokeStyle='#416d5e';ctx.lineWidth=3;rr(ctx,x+1.5,y+1.5,w-3,h-3,17);ctx.stroke();
-  ctx.save();rr(ctx,x+4,y+4,w-8,h-8,15);ctx.clip();
-  ctx.fillStyle='rgba(138,255,191,.035)';
-  for(let yy=y+2;yy<y+h;yy+=4)ctx.fillRect(x+4,yy,w-8,1);
-  ctx.fillStyle='#b6ffd7';ctx.font='bold 12px ui-monospace,monospace';
-  ctx.fillText('◉  WAVE / OSCILLOSCOPE',x+16,y+24);
-  const rec=opts.rec, left=x+22,right=x+w-16,top=y+42;
-  const chartW=Math.max(20,right-left),chartH=Math.max(90,h-104),lane=chartH/3;
-  ctx.strokeStyle='rgba(111,216,161,.16)';ctx.lineWidth=1;
-  for(let j=0;j<=8;j++){
-    const gx=left+chartW*j/8;
-    ctx.beginPath();ctx.moveTo(gx,top);ctx.lineTo(gx,top+chartH);ctx.stroke();
-  }
-  for(let j=0;j<3;j++){
-    const mid=top+lane*(j+0.5);
-    ctx.beginPath();ctx.moveTo(left,mid);ctx.lineTo(right,mid);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(left,top+j*lane);ctx.lineTo(right,top+j*lane);ctx.stroke();
-  }
-  ctx.font='10px ui-monospace,monospace';
-  ctx.fillStyle='#83e9ff';ctx.fillText(opts.feedback?'CH1  Re: source + LIFE':'CH1  Re(h)',left+5,top+12);
-  ctx.fillStyle='#ffc47f';ctx.fillText(opts.feedback?'CH2  Im: source + LIFE':'CH2  Im(h)',left+5,top+lane+12);
-  ctx.fillStyle='#9cf5ae';ctx.fillText('WORLD  '+(opts.responseLabel||'activity'),left+5,top+lane*2+12);
-  if(rec&&rec.re&&rec.re.length>1){
-    const n=rec.re.length,scan=Math.min(n-1,Math.max(0,opts.scan||0));
-    const span=Math.min(n-1,Math.max(72,Math.round(n*0.32)));
-    const start=Math.min(n-1-span,Math.max(0,scan-Math.round(span*0.58)));
-    const end=start+span, peak=rec.amax||1;
-    if(opts.feedback){
-      scopeTrace(ctx,rec,'re',start,end,scan,left,top+17,chartW,lane-21,peak,'#83e9ff',true);
-      scopeTrace(ctx,rec,'im',start,end,scan,left,top+lane+17,chartW,lane-21,peak,'#ffc47f',true);
-    }
-    const signal=opts.feedback||rec;
-    scopeTrace(ctx,signal,'re',start,end,scan,left,top+17,chartW,lane-21,peak,'#83e9ff');
-    scopeTrace(ctx,signal,'im',start,end,scan,left,top+lane+17,chartW,lane-21,peak,'#ffc47f');
-    const cursor=left+(scan-start)*chartW/span;
-    ctx.save();ctx.strokeStyle='rgba(255,245,181,.9)';ctx.lineWidth=1;
-    ctx.shadowColor='#f8edaa';ctx.shadowBlur=10;
-    ctx.beginPath();ctx.moveTo(cursor,top);ctx.lineTo(cursor,top+lane*2);ctx.stroke();ctx.restore();
-    const time=rec.t?rec.t[scan]:scan;
-    const unit=opts.timeUnit||'t';
-    ctx.fillStyle='#e8efd9';ctx.font='10px ui-monospace,monospace';
-    ctx.fillText(unit+' '+Number(time).toFixed(2)+'  ·  sample '+(scan+1)+'/'+n,left,y+h-47);
-    ctx.fillText('DISPLAY GAIN ×'+R.gain.toFixed(2),left,y+h-31);
-  }else{
-    ctx.fillStyle='#b6ffd7';ctx.font='11px ui-monospace,monospace';
-    ctx.fillText('LOAD A FILE TO SEE ITS WAVE',left,top+lane-8);
-  }
-  scopeResponse(ctx,opts,left,top+lane*2+17,chartW,lane-21);
-  ctx.fillStyle='rgba(200,239,216,.75)';ctx.font='9px ui-monospace,monospace';
-  ctx.fillText(opts.feedback?'pale: source · bright: LIFE feedback · '+opts.feedback.live+' live cells':
-    'scan '+(opts.stride||1)+'/gen · full field drives world',left,y+h-13);
-  ctx.restore();ctx.restore();
-}
-/* ── the rail panels ─────────────────────────────────────────────────────────
-   The panels are proofs pinned next to the press, so they are on the same
-   paper and in the same three inks as the sheet. Nothing in this app is
-   allowed to be a dark UI panel sitting next to a print. */
-const PAPER_CSS='#f3ecdd', INK_BLUE='#1f6fc6', INK_PINK='#ff4fb0',
-      INK_YELL='#ffd21e', INK_LINE='rgba(36,26,18,.75)';
-function proofFrame(g,w,h){
-  g.clearRect(0,0,w,h);g.fillStyle=PAPER_CSS;g.fillRect(0,0,w,h);
-  g.strokeStyle=INK_LINE;g.lineWidth=1;g.strokeRect(1.5,1.5,w-3,h-3);
-}
-function drawRecordPanel(rec,mark){
-  const cv=document.getElementById('c_rec'),g=cv.getContext('2d'),w=cv.width,h=cv.height;
-  proofFrame(g,w,h);
-  if(!rec)return;
-  const n=rec.re.length;
-  let rmax=0;for(let i=0;i<n;i++){const r=Math.hypot(rec.re[i],rec.im[i]);if(r>rmax)rmax=r;}
-  rmax=rmax||1;
-  const cx=w/2,cy=h/2,sc=(Math.min(w,h)/2-9)/rmax;
-  g.lineWidth=1.3;
-  /* the trajectory runs from blue at its start to pink at its end: two of the
-     three inks, so the proof cannot show a colour the press cannot print */
-  for(let i=1;i<n;i++){
-    const t=i/n;
-    g.strokeStyle='rgb('+Math.round(31+224*t)+','+Math.round(111-32*t)+','+Math.round(198-22*t)+')';
-    g.beginPath();
-    g.moveTo(cx+rec.re[i-1]*sc,cy-rec.im[i-1]*sc);
-    g.lineTo(cx+rec.re[i]*sc,cy-rec.im[i]*sc);
-    g.stroke();
-  }
-  if(mark!=null&&mark>=0&&mark<n){
-    g.fillStyle=INK_YELL;g.strokeStyle=INK_LINE;g.lineWidth=1.4;
-    g.beginPath();g.arc(cx+rec.re[mark]*sc,cy-rec.im[mark]*sc,3.4,0,6.2832);g.fill();g.stroke();
-  }
-  g.fillStyle=INK_LINE;g.font='9px ui-monospace,Menlo,monospace';
-  g.fillText('Re h →',w-52,h-7);g.fillText('Im h ↑',6,12);
-}
-function drawFieldPanel(field){
-  const cv=document.getElementById('c_fld'),g=cv.getContext('2d'),w=cv.width,h=cv.height;
-  proofFrame(g,w,h);
-  if(!field)return;
-  const fw=field.w,fh=field.h;
-  const off=document.createElement('canvas');off.width=fw;off.height=fh;
-  const og=off.getContext('2d'),img=og.createImageData(fw,fh);
-  const P=[243,236,221];
-  for(let i=0;i<fw*fh;i++){
-    /* frequency picks the ink, amplitude picks how much of it: a plate proof
-       is ink coverage on paper, so it is mixed toward the paper, not toward
-       black */
-    const t=clamp((field.freq[i]+1)*0.5,0,1);
-    const r=31+224*t, gg=111-32*t, b=198-168*t;
-    const a=clamp(0.08+field.amp[i]*0.92,0,1)*(field.mask[i]?1:0.28), o=i*4;
-    img.data[o]=Math.round(P[0]+(r-P[0])*a);
-    img.data[o+1]=Math.round(P[1]+(gg-P[1])*a);
-    img.data[o+2]=Math.round(P[2]+(b-P[2])*a);
-    img.data[o+3]=255;
-  }
-  og.putImageData(img,0,0);
-  const side=Math.min(w,h)-10,x0=(w-side)/2,y0=(h-side)/2;
-  g.imageSmoothingEnabled=true;
-  g.drawImage(off,x0,y0,side,side);
-  g.strokeStyle=INK_LINE;g.lineWidth=1.2;g.strokeRect(x0-1,y0-1,side+2,side+2);
-  g.fillStyle=INK_LINE;g.font='9px ui-monospace,Menlo,monospace';
-  g.fillText('→ time',x0+3,y0+side+11);
-}
-function drawPopPanel(hist,histN,live){
-  const cv=document.getElementById('c_pop'),g=cv.getContext('2d'),w=cv.width,h=cv.height;
-  proofFrame(g,w,h);
-  const n=Math.min(histN,hist.length);
-  if(n<2)return;
-  let mx=1;for(let i=0;i<n;i++){const v=hist[(histN-n+i+hist.length*2)%hist.length];if(v>mx)mx=v;}
-  g.strokeStyle=INK_PINK;g.lineWidth=1.5;g.beginPath();
-  for(let i=0;i<n;i++){
-    const v=hist[(histN-n+i+hist.length*2)%hist.length];
-    const x=2+(w-4)*i/(n-1), y=h-3-(h-8)*(v/mx);
-    i?g.lineTo(x,y):g.moveTo(x,y);
-  }
-  g.stroke();
-  g.fillStyle=INK_LINE;g.font='9px ui-monospace,Menlo,monospace';
-  g.fillText(mx.toLocaleString()+' cards',5,12);
-  g.fillText(live.toLocaleString(),w-42,h-5);
+/* The pulled sheet, handed to the tray: the stage's sheet region, downscaled
+   so a delivered pull costs a thumbnail instead of a full sheet. The stage is
+   composited in device pixels, so the source rect is R.bx/R.by/R.side scaled by
+   the same k the board uses. Draws on its own canvas and touches neither the
+   stage nor its transform; '' means there is nothing to snapshot yet. */
+function snapshotSheet(maxPx){
+  const cv=document.getElementById('stage');
+  if(!cv||!(R.side>0))return '';
+  const k=Math.min(2,window.devicePixelRatio||1);
+  const sx=Math.max(0,Math.min(cv.width-1,Math.round(R.bx*k)));
+  const sy=Math.max(0,Math.min(cv.height-1,Math.round(R.by*k)));
+  const side=Math.round(R.side*k);
+  const sw=Math.max(1,Math.min(side,cv.width-sx)), sh=Math.max(1,Math.min(side,cv.height-sy));
+  const px=Math.max(1,Math.round(maxPx||side));
+  const out=document.createElement('canvas');
+  out.width=px;out.height=px;
+  const g=out.getContext('2d');
+  g.drawImage(cv,sx,sy,sw,sh,0,0,px,px);
+  return out.toDataURL('image/png');
 }

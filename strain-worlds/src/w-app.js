@@ -5,6 +5,8 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 const APP = {
   rec:null, feedback:null, field:null, world:null, S:null, pw:null, rng:null,
+  hist:new Float64Array(180), histN:0,
+  scopeHist:new Float32Array(420), scopeN:0, scopeOffset:40,
   /* the file source: APP.file is the file itself (kind, name, cached contour or
      record) and APP.wmeta the measured numbers of the wave it became */
   file:null, wmeta:null, waveP:48, actx:null,
@@ -13,20 +15,20 @@ const APP = {
      path/matrix/spectro/hst) while life on path, whose 79%-dense mask is
      dominated by its boundary at that size, dies out within a few generations. */
   srcId:'gsfc', fldId:'path', wrldId:'synch', seed:20260919,
-  par:{field:{}, worlds:{}}, hist:new Int32Array(420), histN:0,
-  scopeHist:new Float32Array(420),scopeN:0,scopeOffset:40
+  par:{field:{}, worlds:{}}
 };
 let M=52, Muser=false, speed=10, playing=true, gen=0, liveN=0,
-    acc=0, lastT=performance.now(), lastErr='',
-    shakeMsg='', shakeUntil=0, szT=0;
+    tickClock=performance.now(), lastT=performance.now(), lastErr='';
 
-const $=id=>document.getElementById(id);
 const safe=(fn,d)=>{try{return fn();}catch(e){return d;}};
 
+/* the press has no place to print a stack trace, so a failure is a slug on the
+   machine and the drive stops: the operator is standing right there          */
 function fail(e){
   lastErr=String((e&&e.message)||e);
-  $('hudtxt').style.color='#ff8a7a';
-  $('hudtxt').textContent='ERROR · '+lastErr;
+  if(typeof SHOPVIEW!=='undefined'&&SHOPVIEW.say)
+    SHOPVIEW.say('THE PRESS STOPPED — '+lastErr,TC.pink);
+  if(typeof ROOMVIEW!=='undefined')ROOMVIEW.say('COULD NOT COMPLETE — '+lastErr);
 }
 window.addEventListener('error',e=>fail(e));
 
@@ -64,10 +66,17 @@ function deriveFile(){
   }else{APP.rec=f.rec;APP.wmeta=f.meta;}
 }
 function setSource(id){
+  /* loading the sheet of stock that is already on the feed board changes
+     nothing, so the proof stands. A fresh sheet of house noise is a fresh
+     sheet: the noise is drawn from the press's own seed, so re-loading it
+     re-cuts the wave. */
+  const same=!!(APP.field&&APP.world&&id===APP.srcId&&id!=='file'&&id!=='noise');
   APP.srcId=id;
-  if(id==='gsfc')APP.rec=recFromGSFC();
-  else if(id==='noise')APP.rec=recFromNoise();
+  if(id==='gsfc'){APP.rec=recFromGSFC();APP.wmeta=null;}
+  else if(id==='noise'){APP.seed=(APP.seed+1)>>>0;APP.rec=recFromNoise();APP.wmeta=null;}
   else if(id==='file'&&APP.file)deriveFile();
+  if(same)return;
+  if(typeof knockBack==='function')knockBack('A DIFFERENT COMMISSION');
   rebuild();
 }
 function loadTextFile(f){
@@ -80,7 +89,7 @@ function loadTextFile(f){
       const rec=prepRecord(o);rec.name=f.name;
       APP.file={kind:'text',name:f.name,rec,meta:{kind:'text',file:f.name,points:o.re.length,columns:o.kind}};
       APP.srcId='file';deriveFile();
-      syncWaveRow();drawSourceChips();drawFieldChips();rebuild();
+      knockBack('A FILE CAME IN AS A NEW COMMISSION');rebuild();
     }catch(e){fail(e);}
   };
   r.readAsText(f);
@@ -103,7 +112,7 @@ function loadImageFile(f){
     const contour=traceImage(f,bmp);
     APP.file={kind:'image',name:f.name,contour,size:bmp.width+'×'+bmp.height};
     APP.srcId='file';deriveFile();
-    syncWaveRow();drawSourceChips();drawFieldChips();rebuild();
+    knockBack('A PICTURE CAME IN AS A NEW COMMISSION');rebuild();
   }).catch(fail);
 }
 function audioCtx(){
@@ -123,7 +132,7 @@ function loadAudioFile(f){
       const raw=waveAudio({samples:mix,sr:buf.sampleRate,name:f.name});
       APP.file={kind:'audio',name:f.name,rec:prepRecord(raw),meta:raw.wave,size:ch+'ch'};
       APP.srcId='file';deriveFile();
-      syncWaveRow();drawSourceChips();drawFieldChips();rebuild();
+      knockBack('A SOUND CAME IN AS A NEW COMMISSION');rebuild();
     }).catch(()=>fail(new Error('cannot decode '+f.name+' as audio')));
   };
   r.readAsArrayBuffer(f);
@@ -135,25 +144,6 @@ function loadFile(f){
   else if(kind==='audio')loadAudioFile(f);
   else loadTextFile(f);
 }
-/* the measured numbers of the conversion, printed next to the dial */
-function waveText(m){
-  if(m.kind==='image')
-    return 'traced the '+(m.invert?'light':'dark')+' side at level '+m.level.toFixed(4)+': '+m.loops+
-      ' traversal'+(m.loops===1?'':'s')+', '+m.crossings+' crossings, resampled to '+m.points+
-      ' points on a '+m.frame+' frame; the record is their '+m.P+' largest harmonics of '+m.maxP+
-      ' — RMS '+m.rms.toFixed(3)+' px, max '+m.max.toFixed(3)+' px, silhouette IoU '+m.iou.toFixed(4);
-  if(m.kind==='audio')
-    return m.source+' samples at '+m.sr+' Hz box-averaged by '+m.factor+' onto '+m.points+' at '+
-      m.rate.toFixed(1)+' Hz; the record is their analytic signal x + i·H(x)';
-  return m.points+' '+m.columns+' samples read straight as the complex record';
-}
-function syncWaveRow(){
-  const m=APP.wmeta,onFile=APP.srcId==='file',show=!!(onFile&&m&&m.kind==='image');
-  $('wvrow').style.display=show?'flex':'none';
-  if(show){$('r_harm').max=m.maxP;$('r_harm').value=m.P;$('o_harm').value=m.P;}
-  $('wvnote').textContent=(onFile&&m)?waveText(m):'';
-}
-
 /* ── build ───────────────────────────────────────────────────────────────── */
 function buildField(){
   if(!APP.rec){APP.field=null;return;}
@@ -177,181 +167,86 @@ function startWorld(){
   APP.world=w;APP.pw=livePar(APP.wrldId);
   APP.rng=mulberry32(APP.seed^0x9e3779b9);
   APP.S=w.init(M,M,APP.field,APP.rng,APP.pw);
+  /* the drive has been turning while you were at the counter: a freshly
+     mounted plate does not arrive as a blank board, or the first thing the
+     operator sees is an empty sheet and no way to tell it from a broken one */
+  const warm=(w.id==='grav')?40:120;
+  for(let i=0;i<warm;i++)safe(()=>w.step(APP.S,APP.field,APP.pw));
+  gen=warm;
+  APP.histN=0;
+  APP.scopeN=0;AUDIO.lastIndex=-1;
   APP.V=safe(()=>w.view(APP.S),null);        /* the same buffers, kept for the app */
-  gen=0;liveN=safe(()=>w.stats(APP.S),0)||0;
-  APP.histN=0;APP.hist.fill(0);
-  APP.hist[0]=liveN;APP.histN=1;
-  APP.scopeN=0;APP.scopeHist.fill(0);recordScopePoint();
-}
-function scopeStride(rec){return rec&&rec.re?Math.max(1,Math.round(rec.re.length/360)):1;}
-function scopeIndex(rec){return rec&&rec.re?(Math.floor(rec.re.length*APP.scopeOffset/100)+gen*scopeStride(rec))%rec.re.length:-1;}
-function recordScopePoint(){
-  const value=APP.wrldId==='synch'&&APP.S?APP.S.order:liveN/Math.max(1,M*M);
-  APP.scopeHist[APP.scopeN%APP.scopeHist.length]=clamp(value,0,1);
-  APP.scopeN++;
-}
-/* Web Audio starts only after the audience presses the sound button. The
-   scanner and the synth read the same sample index; neither edits the record. */
-const AUDIO={ctx:null,enabled:false,mode:'tone',volume:0.65,lastIndex:-1,
-  lastMode:'',lastVolume:-1,reading:{}};
-function audioButton(){
-  $('soundchip').textContent=AUDIO.enabled?'■ stop sound':'▶ sound';
-  $('soundchip').classList.toggle('on',AUDIO.enabled);
-  $('soundchip').setAttribute('aria-pressed',String(AUDIO.enabled));
-}
-function stopAudio(){
-  const ctx=AUDIO.ctx;
-  AUDIO.ctx=null;AUDIO.enabled=false;AUDIO.lastIndex=-1;
-  if(ctx)ctx.close().catch(()=>{});
-  audioButton();
-  $('sound_note').textContent='Sound stopped. Loudness ← |h|; pitch ← phase rotation; stereo ← complex phase.';
-}
-function startAudio(){
-  if(!APP.rec||!APP.rec.re){
-    $('sound_note').textContent='Choose GSFC strain, noise, or a file to hear its waveform.';
-    return;
-  }
-  const AudioCtor=window.AudioContext||window.webkitAudioContext;
-  if(!AudioCtor){$('sound_note').textContent='This browser does not support Web Audio.';return;}
-  try{
-    const ctx=new AudioCtor(),fund=ctx.createOscillator(),harm=ctx.createOscillator();
-    const g1=ctx.createGain(),g2=ctx.createGain(),filter=ctx.createBiquadFilter();
-    const pan=ctx.createStereoPanner?ctx.createStereoPanner():null,master=ctx.createGain();
-    fund.type='sine';harm.type='triangle';g1.gain.value=0.82;g2.gain.value=0.18;
-    filter.type='lowpass';filter.Q.value=0.7;master.gain.value=0;
-    fund.connect(g1);harm.connect(g2);g1.connect(filter);g2.connect(filter);
-    if(pan){filter.connect(pan);pan.connect(master);}else filter.connect(master);
-    master.connect(ctx.destination);fund.start();harm.start();
-    Object.assign(AUDIO,{ctx,fund,harm,filter,pan,master,enabled:true,lastIndex:-1});
-    if(!playing){playing=true;$('b_play').textContent='⏸ hold';}
-    audioButton();
-    ctx.resume().then(()=>{if(AUDIO.ctx===ctx)updateAudio(true);})
-      .catch(e=>{if(AUDIO.ctx===ctx){stopAudio();$('sound_note').textContent='Audio could not start: '+e.message;}});
-  }catch(e){stopAudio();$('sound_note').textContent='Audio could not start: '+e.message;}
-}
-function updateAudio(force){
-  if(!AUDIO.enabled||!AUDIO.ctx)return;
-  const a=AUDIO,ctx=a.ctx,now=ctx.currentTime;
-  const rec=APP.rec&&APP.rec.re?APP.rec:null;
-  if(!playing||speed<=0||!rec){
-    if(a.lastIndex!==-2){a.master.gain.setTargetAtTime(0,now,0.025);a.lastIndex=-2;}
-    return;
-  }
-  const index=scopeIndex(rec);
-  if(!force&&index===a.lastIndex&&a.lastMode===a.mode&&a.lastVolume===a.volume)return;
-  const life=APP.wrldId==='life'?APP.feedback:null;
-  const v=life?sonifyLifeFrame(rec,life,index,a.mode,a.reading):sonifyFrame(rec,index,a.mode,a.reading);
-  a.fund.frequency.setTargetAtTime(v.pitch,now,0.035);
-  a.harm.frequency.setTargetAtTime(v.pitch*2,now,0.035);
-  a.filter.frequency.setTargetAtTime(400+4200*v.brightness,now,0.06);
-  if(a.pan)a.pan.pan.setTargetAtTime(v.pan,now,0.08);
-  a.master.gain.setTargetAtTime(a.volume*(0.003+0.45*Math.pow(v.level,0.85)),now,0.07);
-  a.lastIndex=index;a.lastMode=a.mode;a.lastVolume=a.volume;
-  $('sound_note').textContent=(a.mode==='music'?'PHASE MUSIC':'STRAIN TONE')+
-    ' · '+Math.round(v.pitch)+' Hz audible · '+(life?'LIFE wave':'|h|')+' '+Math.round(v.level*100)+
-    '% · '+(life?life.live+' live cells · ':'')+'source phase rate '+v.sourceHz.toFixed(3)+' Hz';
+  liveN=safe(()=>w.stats(APP.S),0)||0;
+  tickClock=performance.now();
+  recordPopulation();
 }
 function rebuild(){
   try{
     buildField();
     startWorld();
-    drawRecordPanel(APP.rec&&APP.rec.re?APP.rec:null);
-    drawFieldPanel(APP.field);
-    drawParams();
-    updateNotes();
-    syncWaveRow();
-    shakeMsg='';shakeUntil=0;APP.lastShake='';
-    AUDIO.lastIndex=-1;
     paint();
   }catch(e){fail(e);}
 }
-function reseed(){                       /* same record, same field, new seed */
-  APP.seed=(APP.seed+1)|0;
-  if(APP.srcId==='noise'&&APP.rec)APP.rec=recFromNoise();
-  try{ if(APP.srcId==='noise')buildField(); startWorld(); AUDIO.lastIndex=-1;paint(); }catch(e){fail(e);}
+function recordPopulation(){
+  APP.hist[APP.histN%APP.hist.length]=liveN;
+  APP.histN++;
+  recordScopePoint();
+  APP.feedback=APP.wrldId==='life'&&APP.rec&&APP.S?lifeFeedback(APP.rec,APP.S):null;
+  AUDIO.lastIndex=-1;
 }
-
-/* ── the loop ────────────────────────────────────────────────────────────── */
-/* The app owns starburst decay, and it decays once per GENERATION (not per
-   frame), so a spark's brightness is 0.78^g at g generations after the birth and
-   is invisible (under 0.05) after about twelve, at any frame rate. A world only
-   ever sets V.spark[i] = 1 on the tick a birth happens; it must not decay the
-   array itself, and it must not carry spark state in S. */
-function decaySpark(){
-  const V=APP.V;if(!V)return;
-  const sp=V.spark;
-  for(let i=0;i<sp.length;i++)sp[i]*=0.78;
+function scopeStride(rec){return rec&&rec.re?Math.max(1,Math.round(rec.re.length/360)):1;}
+function scopeIndex(rec){return rec&&rec.re?(Math.floor(rec.re.length*APP.scopeOffset/100)+gen*scopeStride(rec))%rec.re.length:-1;}
+function recordScopePoint(){
+  const value=APP.wrldId==='synch'&&APP.S?APP.S.order:liveN/Math.max(1,M*M);
+  APP.scopeHist[APP.scopeN%APP.scopeHist.length]=clamp(value,0,1);APP.scopeN++;
 }
-function paint(){
-  /* view() returns the CURRENT state and is cheap (measured 0.001-0.046 ms), so
-     it is called on every paint. Never cache the object across steps: worlds are
-     allowed to sync their view inside view() rather than inside step(), and a
-     cached array then shows the state from whenever it was fetched. */
-  const V=(APP.world&&APP.S)?safe(()=>APP.world.view(APP.S),null):null;
-  APP.V=V;
-  APP.gen=gen;          /* the edition stamp prints the generation it pulled at */
-  const rec=APP.rec&&APP.rec.re?APP.rec:null,scan=scopeIndex(rec);
-  APP.feedback=APP.wrldId==='life'&&rec&&APP.S?lifeFeedback(rec,APP.S):null;
-  drawStage(V,APP.field,{dead:!!(V&&liveN===0&&gen>2),
-    what:APP.world?APP.world.label:'',size:M,rec,feedback:APP.feedback,scan,
-    stride:scopeStride(rec),response:APP.scopeHist,responseN:APP.scopeN,
-    responseLabel:APP.wrldId==='synch'?'global order r':'live / board',
-    timeUnit:rec&&rec.timeUnit||'t'});
-  if(R.scope)drawRecordPanel(rec,scan);
-  drawPopPanel(APP.hist,APP.histN,liveN);
-  updateHud();
-  if(AUDIO.enabled)updateAudio(true); // a shake also changes LIFE without advancing the scan
+/* Upstream sonification, operated by the listening bench. Both instruments
+   follow one sample cursor. Display gain/offset never change the record. */
+const AUDIO={ctx:null,enabled:false,mode:'tone',volume:.65,lastIndex:-1,
+  lastMode:'',lastVolume:-1,reading:{}};
+function stopAudio(){
+  const ctx=AUDIO.ctx;AUDIO.ctx=null;AUDIO.enabled=false;AUDIO.lastIndex=-1;
+  if(ctx)ctx.close().catch(()=>{});
+  ROOMVIEW.say('Sound stopped. Loudness ← amplitude; pitch ← phase rotation; stereo ← complex phase.');
 }
-function frame(){
-  const now=performance.now();
-  const dt=Math.min(0.5,(now-lastT)/1000);lastT=now;
-  R.clock=now/1000;
-  if(playing&&APP.world&&APP.S){
-    acc+=dt*speed;
-    let steps=Math.floor(acc);
-    if(steps>0){
-      acc-=steps;
-      if(steps>90)steps=90;
-      for(let i=0;i<steps;i++){
-        decaySpark();
-        try{APP.world.step(APP.S,APP.field,APP.pw);}
-        catch(e){playing=false;$('b_play').textContent='▶ run';fail(e);break;}
-        gen++;
-      }
-      liveN=safe(()=>APP.world.stats(APP.S),liveN)||0;
-      APP.hist[APP.histN%APP.hist.length]=liveN;APP.histN++;
-      recordScopePoint();
-      paint();
-    }
+function startAudio(){
+  if(AUDIO.enabled)return;
+  if(!APP.rec||!APP.rec.re){ROOMVIEW.say('Choose a record or bring a file to hear its waveform.');return;}
+  const AudioCtor=window.AudioContext||window.webkitAudioContext;
+  if(!AudioCtor){ROOMVIEW.say('This browser does not support Web Audio.');return;}
+  try{
+    const ctx=new AudioCtor();AUDIO.ctx=ctx;
+    const fund=ctx.createOscillator(),harm=ctx.createOscillator();
+    const g1=ctx.createGain(),g2=ctx.createGain(),filter=ctx.createBiquadFilter();
+    const pan=ctx.createStereoPanner?ctx.createStereoPanner():null,master=ctx.createGain();
+    fund.type='sine';harm.type='triangle';g1.gain.value=.82;g2.gain.value=.18;
+    filter.type='lowpass';filter.Q.value=.7;master.gain.value=0;
+    fund.connect(g1);harm.connect(g2);g1.connect(filter);g2.connect(filter);
+    if(pan){filter.connect(pan);pan.connect(master);}else filter.connect(master);
+    master.connect(ctx.destination);fund.start();harm.start();
+    Object.assign(AUDIO,{fund,harm,filter,pan,master,enabled:true,lastIndex:-1});
+    playing=true;
+    ctx.resume().then(()=>{if(AUDIO.ctx===ctx)updateAudio(true);})
+      .catch(e=>{if(AUDIO.ctx===ctx){stopAudio();ROOMVIEW.say('Audio could not start: '+e.message);}});
+  }catch(e){stopAudio();ROOMVIEW.say('Audio could not start: '+e.message);}
+}
+function updateAudio(force){
+  if(!AUDIO.enabled||!AUDIO.ctx)return;
+  const a=AUDIO,now=a.ctx.currentTime,rec=APP.rec&&APP.rec.re?APP.rec:null;
+  if(!playing||speed<=0||!rec){
+    if(a.lastIndex!==-2){a.master.gain.setTargetAtTime(0,now,.025);a.lastIndex=-2;}return;
   }
-  updateAudio(false);
-}
-function updateHud(){
-  if(lastErr&&$('hudtxt').textContent.startsWith('ERROR'))return;
-  $('hudtxt').style.color='#241a12';
-  const w=APP.world,extra=w?safe(()=>w.HUD(APP.S,APP.field,APP.pw),''):'';
-  /* A world's HUD string is its own readout and several of them print the
-     generation and the live count themselves. When one does, its string is the
-     whole caption and the app's own counters stay in the stats panel rather than
-     being printed twice in the same line. */
-  const own=/gen\s+\d+/i.test(extra);
-  const mine='gen '+gen+' · '+liveN.toLocaleString()+' cards';
-  $('hudtxt').textContent=own?extra:(mine+(extra?' · '+extra:''));
-  const shake=(shakeUntil>performance.now()&&shakeMsg)?['SHAKE '+shakeMsg]:[];
-  $('ticker').textContent=shake.concat([APP.field?APP.field.label:'',w?w.label:'',
-    own?extra:(extra+' · '+mine)]).filter(Boolean).join('   ·   ');
-}
-function updateNotes(){
-  const f=APP.field,w=APP.world;
-  $('fnote').textContent=f?f.note:'';
-  $('wnote').innerHTML=(w?('<b>'+w.label+'.</b> '+(w.blurb||'')+' '+(WORLD_NOTE[w.id]||'')):'');
-  $('life_note').style.display=APP.wrldId==='life'?'block':'none';
-  if(APP.rec&&APP.rec.re){
-    const n=APP.rec.re.length;
-    $('note').textContent=(APP.rec.name||'record')+' — '+n+' complex samples'+
-      (APP.rec.turns!=null?', '+APP.rec.turns.toFixed(2)+' turns of phase':'')+
-      (APP.rec.amax!=null?', |h| up to '+APP.rec.amax.toFixed(3):'');
-  }
+  const index=scopeIndex(rec);
+  if(!force&&index===a.lastIndex&&a.lastMode===a.mode&&a.lastVolume===a.volume)return;
+  const v=APP.feedback?sonifyLifeFrame(rec,APP.feedback,index,a.mode,a.reading):sonifyFrame(rec,index,a.mode,a.reading);
+  a.fund.frequency.setTargetAtTime(v.pitch,now,.035);
+  a.harm.frequency.setTargetAtTime(v.pitch*2,now,.035);
+  a.filter.frequency.setTargetAtTime(400+4200*v.brightness,now,.06);
+  if(a.pan)a.pan.pan.setTargetAtTime(v.pan,now,.08);
+  a.master.gain.setTargetAtTime(a.volume*(.003+.45*Math.pow(v.level,.85)),now,.07);
+  a.lastIndex=index;a.lastMode=a.mode;a.lastVolume=a.volume;
+  ROOMVIEW.say((a.mode==='music'?'PHASE MUSIC':'STRAIN TONE')+' · '+Math.round(v.pitch)+
+    ' Hz audible · amplitude '+Math.round(v.level*100)+'% · intentional sonification');
 }
 /* the measured headline for each world; every number here is from that world's
    probe or from the browser, and none of them are estimates */
@@ -395,265 +290,331 @@ const WORLD_NOTE={
        'accumulating.'
 };
 
-/* ── controls ────────────────────────────────────────────────────────────── */
-function chip(label,on,fn){
-  const b=document.createElement('div');
-  b.className='chip'+(on?' on':'');b.textContent=label;
-  b.addEventListener('click',fn);return b;
+/* ── the shop floor ──────────────────────────────────────────────────────────
+   A print shop is not a panel of settings; it is a sequence with consequences,
+   and the consequences are now carried by the machine itself. Work arrives at
+   the counter, the press is MADE READY, a proof is pulled and approved, and
+   only then does the edition run. Nothing in this file draws: the operator's
+   hands are in w-shop.js, and this is the ledger of what the floor has done.
+   The only thing the sheet is allowed to know about the state below is which
+   of the three modes it is printed in — a makeready sheet is scrap and says so,
+   a proof carries every mark the operator needs to judge it, and an approved
+   edition sheet is trimmed clean. You learn what the marks are for by watching
+   them be taken away.                                                     */
+const SHOP={ state:'makeready', job:1, N:8, n:1, pulled:[] };
+const SHEET_MODE={makeready:'makeready',proof:'proof',run:'edition',done:'edition'};
+/* every message the floor has to give is a slip of paper coming out of the
+   machine, so the app has no channel for text other than the shop's own tape */
+function shopSay(t,tone){
+  if(typeof SHOPVIEW!=='undefined'&&SHOPVIEW.say)SHOPVIEW.say(t,tone||TC.black);
 }
-function drawSourceChips(){
-  const c=$('srcs');c.innerHTML='';
-  const add=(id,lab)=>c.appendChild(chip(lab,APP.srcId===id,()=>{setSource(id);drawSourceChips();}));
-  add('gsfc','GSFC strain');
-  add('noise','noise');
-  /* the third source is one chip whatever the file was: a file is a wave */
-  if(APP.file)add('file','wave from file · '+(APP.file.name||'').slice(0,14));
-  c.appendChild(chip(APP.file?'+ open another':'+ wave from file',false,()=>$('f_any').click()));
-  c.appendChild(chip('+ trace an image',false,()=>$('f_img').click()));
+/* Registration is the operator's own work on the three pins, and the pin is the
+   instrument, so the press has no registration setting: it asks the shop, every
+   frame, how far out each plate is and prints exactly that. */
+function pressSlip(){
+  return (typeof SHOPVIEW!=='undefined'&&SHOPVIEW.slip)?SHOPVIEW.slip():1;
 }
-function drawFieldChips(){
-  const c=$('flds');c.innerHTML='';
-  for(const f of FIELDS)
-    c.appendChild(chip(f.label,APP.fldId===f.id,()=>{APP.fldId=f.id;drawFieldChips();drawParams();rebuild();}));
-  if(!FIELDS.length)c.appendChild(chip('(field module missing)',false,()=>{}));
-}
-function drawWorldChips(){
-  const c=$('wrlds');c.innerHTML='';
-  for(const w of WORLDS)
-    c.appendChild(chip(w.label,APP.wrldId===w.id,()=>{APP.wrldId=w.id;drawWorldChips();drawParams();startWorld();updateNotes();paint();}));
-  if(!WORLDS.length)c.appendChild(chip('(world modules missing)',false,()=>{}));
-}
-function rangeRow(holder,label,key,min,max,step,get,set){
-  const row=document.createElement('div');row.className='row';
-  const l=document.createElement('label');l.textContent=label;
-  const r=document.createElement('input');r.type='range';
-  r.min=min;r.max=max;r.step=step;r.value=get();
-  const o=document.createElement('output');o.value=String(get());
-  r.addEventListener('input',()=>{set(parseFloat(r.value));o.value=String(get());});
-  row.appendChild(l);row.appendChild(r);row.appendChild(o);
-  holder.appendChild(row);
-}
-/* A param with `options` is a choice, not a range: the field or world declares
-   [{value,label}] and its `def` is one of the values. Rendering it as a range
-   would print NaN bounds and silently write a number where a string belongs. */
-function selectRow(holder,label,options,get,set){
-  const row=document.createElement('div');row.className='row';
-  const l=document.createElement('label');l.textContent=label;
-  const s=document.createElement('select');
-  for(const o of options){
-    const opt=document.createElement('option');
-    opt.value=o.value;opt.textContent=o.label;if(get()===o.value)opt.selected=true;
-    s.appendChild(opt);
+/* the sheet's own registration error in device px: the renderer's own function,
+   which reads R.slipScale — the three plate slips the shop's pins are holding.
+   Never name a function here measuredSlip: the renderer already owns that name
+   on the page, and a second declaration would overwrite it and recurse. */
+function pressSlipErr(){ return (typeof measuredSlip==='function')?measuredSlip():0; }
+/* Changing what the job IS voids the proof lying on the table — the press is no
+   longer set up for the thing that was approved, so the sheet comes off the pile
+   and goes in the bin. It costs a proof and never the sheets already delivered:
+   SHOP.n is not rewound, so re-approving resumes the edition where it stopped. */
+function knockBack(why){
+  if(SHOP.state==='makeready')return;
+  const last=SHOP.pulled[SHOP.pulled.length-1];
+  if(last&&last.kind==='proof'){
+    SHOP.pulled.pop();
+    if(typeof SHOPVIEW!=='undefined'&&SHOPVIEW.deliver)SHOPVIEW.deliver('void');
   }
-  s.addEventListener('change',()=>set(s.value));
-  row.appendChild(l);row.appendChild(s);holder.appendChild(row);
+  SHOP.state='makeready';
+  shopSay(why+' — THE PROOF IS VOID');
 }
-function drawParams(){
-  const h=$('params');h.innerHTML='';
-  const f=fieldById(APP.fldId);
-  if(f&&f.params){
-    const t=document.createElement('div');t.className='chips';t.style.marginTop='7px';
-    t.appendChild(chip('field: '+f.label,true,()=>{}));h.appendChild(t);
-    for(const p of f.params){
-      if(APP.par.field[p.key]===undefined)APP.par.field[p.key]=p.def;
-      if(p.options)selectRow(h,p.label,p.options,()=>APP.par.field[p.key],
-        v=>{APP.par.field[p.key]=v;rebuild();});
-      else rangeRow(h,p.label,p.key,p.min,p.max,p.step,
-        ()=>APP.par.field[p.key],v=>{APP.par.field[p.key]=v;rebuild();});
+/* Each pull advances the paper: a new seed means a new registration slip, a new
+   dot phase and a new grain, so two sheets of one edition are two impressions
+   of the same plates and not one picture shown twice. */
+function advancePaper(){ APP.seed=(APP.seed+1)|0; }
+/* A delivered sheet carries no machine on it: the sheet is drawn on its own over
+   the stage, read back, and the press paints itself over it again next frame. */
+function sheetSnap(maxPx){
+  if(!APP.field||!(typeof R!=='undefined'&&R.side>0))return '';
+  try{
+    drawStage(APP.V,APP.field,APP.sheetOpts||{});
+    return snapshotSheet(maxPx);
+  }catch(e){return '';}
+}
+function addSheet(kind){
+  const url=sheetSnap(158);
+  if(!url)return;
+  SHOP.pulled.push({kind:kind,url:url,job:SHOP.job,n:SHOP.n,N:SHOP.N,
+    plate:(APP.field&&APP.field.label)||'—',law:(APP.world&&APP.world.label)||'—',
+    seed:APP.seed,gen:gen,reg:pressSlipErr()});
+  if(typeof SHOPVIEW!=='undefined'&&SHOPVIEW.deliver)SHOPVIEW.deliver(kind);
+}
+function newJob(){
+  SHOP.job++;SHOP.n=1;SHOP.pulled.length=0;SHOP.state='makeready';
+  APP.seed=(APP.seed+1)|0;
+  if(typeof SHOPVIEW!=='undefined'&&SHOPVIEW.deliver)SHOPVIEW.deliver('clear');
+  shopSay('JOB '+String(SHOP.job).padStart(3,'0')+' ON THE COUNTER');
+  rebuild();
+}
+/* The lever is the only thing in the shop that makes a sheet exist, and what it
+   does depends on where the job has got to: it pulls a proof, it approves the
+   proof and lets the drive in, it pulls the next sheet of the edition, and when
+   the run is delivered it takes the next commission off the counter. */
+function pull(){
+  const st=SHOP.state;
+  if(st==='makeready'){
+    /* a proof is pulled from a stopped press so it can actually be read */
+    SHOP.state='proof';playing=false;
+    paint();addSheet('proof');
+    shopSay('PROOF PULLED AT GEN '+gen+' — read it, then approve it or change something');
+  }else if(st==='proof'){
+    SHOP.state='run';playing=true;
+    shopSay('PROOF APPROVED — running the edition of '+SHOP.N+', drive in');
+  }else if(st==='run'){
+    paint();addSheet('edition');
+    SHOP.n++;advancePaper();
+    if(SHOP.n>SHOP.N){SHOP.state='done';shopSay('RUN COMPLETE — '+SHOP.N+' SHEETS DELIVERED');}
+  }else{ newJob();paint();return; }
+  paint();
+}
+/* ── the machine's own API ───────────────────────────────────────────────────
+   Everything the furniture drawn on the canvas is allowed to ask the press to
+   do. There is no other way in: the pins, the keys, the cams, the wheels, the
+   throttle, the clutch, the lever and the feed board all call through here, so
+   the whole interface is exactly this list.                                */
+const API={
+  /* -- the plate on the cylinder ------------------------------------------ */
+  fields(){ return (typeof FIELDS!=='undefined')?FIELDS.map(f=>({id:f.id,label:f.label})):[]; },
+  fieldParams(){
+    const f=fieldById(APP.fldId),out=[];
+    if(!f||!f.params)return out;
+    for(const q of f.params){
+      if(APP.par.field[q.key]===undefined)APP.par.field[q.key]=q.def;
+      out.push({key:q.key,label:q.label,value:APP.par.field[q.key],
+        min:q.min,max:q.max,step:q.step,options:q.options});
     }
-  }
-  const w=worldById(APP.wrldId);
-  if(w&&w.params){
-    for(const p of w.params){
-      const store=APP.par.worlds[w.id]||(APP.par.worlds[w.id]={});
-      if(store[p.key]===undefined)store[p.key]=p.def;
-      if(p.options)selectRow(h,p.label,p.options,()=>store[p.key],v=>{store[p.key]=v;});
-      else rangeRow(h,p.label,p.key,p.min,p.max,p.step,()=>store[p.key],v=>{store[p.key]=v;});
+    return out;
+  },
+  setField(id){
+    if(!id||APP.fldId===id)return;
+    APP.fldId=id;knockBack('A NEW PLATE WENT ON THE CYLINDER');rebuild();
+  },
+  setFieldParam(key,v){
+    const f=fieldById(APP.fldId);
+    if(!f||!f.params)return;
+    const q=f.params.filter(x=>x.key===key)[0];
+    if(!q)return;
+    APP.par.field[key]=v;knockBack('THE PLATE WAS RE-CUT');rebuild();
+  },
+  /* -- the law on the drive shaft ----------------------------------------- */
+  worlds(){ return (typeof WORLDS!=='undefined')?WORLDS.map(w=>({id:w.id,label:w.label})):[]; },
+  worldParams(){
+    const w=worldById(APP.wrldId),out=[];
+    if(!w||!w.params)return out;
+    const store=APP.par.worlds[w.id]||(APP.par.worlds[w.id]={});
+    for(const q of w.params){
+      if(store[q.key]===undefined)store[q.key]=q.def;
+      out.push({key:q.key,label:q.label,value:store[q.key],
+        min:q.min,max:q.max,step:q.step,options:q.options});
     }
-  }
-}
+    return out;
+  },
+  setWorld(id){
+    if(!id||APP.wrldId===id)return;
+    APP.wrldId=id;knockBack('THE LAW ON THE SHAFT CHANGED');
+    startWorld();paint();
+  },
+  setWorldParam(key,v){
+    const w=worldById(APP.wrldId);
+    if(!w||!w.params)return;
+    const store=APP.par.worlds[w.id]||(APP.par.worlds[w.id]={});
+    store[key]=v;knockBack('THE LAW WAS RE-SET');
+  },
+  /* -- the stock on the feed board ---------------------------------------- */
+  setSource(id){ setSource(id); },
+  loadStock(f){ if(f)loadFile(f); },
+  setInkKey(i,v){
+    const n=clamp(v,0,1);if(n===SHV.key[i])return;
+    SHV.key[i]=n;
+    if(R.inkKey)R.inkKey[i]=.30+1.10*n;
+    knockBack('THE INK COVERAGE WAS CHANGED');
+  },
+  sourceCount(){ return 3; },
+  /* -- the harmonics plug: it exists only while an image is on the feed ---- */
+  hasHarmonics(){ return !!(APP.srcId==='file'&&APP.file&&APP.file.kind==='image'&&APP.wmeta&&
+    APP.wmeta.kind==='image'); },
+  harmonics(){ return APP.waveP; },
+  setHarmonics(v){
+    const n=clamp(Math.round(v),1,1023);
+    if(n===APP.waveP)return;
+    APP.waveP=n;
+    knockBack('THE COMMISSION WAS RE-CUT');
+    if(APP.srcId==='file'&&APP.file&&APP.file.kind==='image'){deriveFile();rebuild();}
+  },
+  /* -- the drive side ----------------------------------------------------- */
+  setSpeed(v){ const n=clamp(v,1,60); if(Math.round(n)!==Math.round(speed))speed=n; },
+  hold(down){ playing=!!down; },
+  inch(n){
+    if(!APP.world||!APP.S)return;
+    n=(n|0)||1;
+    for(let i=0;i<n;i++){
+      decaySpark();
+      try{APP.world.step(APP.S,APP.field,APP.pw);}catch(e){fail(e);break;}
+      gen++;
+    }
+    liveN=safe(()=>APP.world.stats(APP.S),liveN)||0;
+    recordPopulation();
+    paint();
+  },
+  setSpark(v){ R.sparkBudget=clamp(Math.round(v),0,40); },
+  setN(v){ SHOP.N=clamp(Math.round(v),1,24); },
+  setM(v){
+    const n=clamp(Math.round(v),16,120);
+    if(n===M)return;
+    Muser=true;M=n;setM(M);
+    knockBack('THE IMPRESSION CHANGED');
+    rebuild();
+  },
+  /* -- the lever ---------------------------------------------------------- */
+  pull(){ pull(); },
+  discard(i){
+    if(!SHOP.pulled.length)return;
+    const k=(i==null)?SHOP.pulled.length-1:clamp(i|0,0,SHOP.pulled.length-1);
+    SHOP.pulled.splice(k,1);
+    if(typeof SHOPVIEW!=='undefined'&&SHOPVIEW.deliver)SHOPVIEW.deliver('clear');
+  },
+  shake(p){ doShake(p); },
+  say(t,tone){ if(typeof SHOPVIEW!=='undefined'&&SHOPVIEW.say)SHOPVIEW.say(t,tone); }
+};
+
 /* ── the shake ───────────────────────────────────────────────────────────────
-   The audience-facing interaction. shake() is a pure function of the world's
-   state, the field and power, driven by the world's own seeded generator, so the
-   same gesture on the same board replays exactly. It returns one line of
-   measured numbers describing what the kick did as it landed — never a recovery
-   time, which cannot exist yet at the moment it returns. */
+   The audience-facing interaction, and it is a physical one: grab the frame of
+   the machine and shake it. shake() is a pure function of the world's state,
+   the field and power, driven by the world's own seeded generator, so the same
+   gesture on the same board replays exactly. It returns one line of measured
+   numbers describing what the kick did as it landed — never a recovery time,
+   which cannot exist yet at the moment it returns. */
 function doShake(power){
   const w=APP.world;
   if(!w||!APP.S||!APP.field)return '';
   if(typeof w.shake!=='function'){
-    shakeMsg='no shake for '+w.label;shakeUntil=performance.now()+2600;
-    paint();return '';
+    if(typeof SHOPVIEW!=='undefined'&&SHOPVIEW.say)
+      SHOPVIEW.say('NO SHAKE FOR '+w.label,TC.pink);
+    return '';
   }
   let msg;
   try{msg=w.shake(APP.S,APP.field,clamp(power,0,1));}catch(e){fail(e);return '';}
-  shakeUntil=performance.now()+2600;
   if(lastErr)return '';
   APP.lastShake=msg||'';
-  shakeMsg=msg||('shake '+clamp(power,0,1).toFixed(2));
+  if(typeof SHOPVIEW!=='undefined'&&SHOPVIEW.say)
+    SHOPVIEW.say(msg||('KNOCK '+clamp(power,0,1).toFixed(2)),TC.black);
+  liveN=safe(()=>w.stats(APP.S),liveN)||0;
+  recordPopulation();
   paint();
   return APP.lastShake;
 }
-function bindShake(){
-  /* a drag-shake: three direction reversals inside one gesture, power from how
-     far the pointer travelled — 2600 px of travel is full power, and a gesture
-     that qualifies is never treated as a nudge */
-  const G={on:false,x:0,y:0,dir:0,travel:0,rev:0};
-  window.addEventListener('pointerdown',e=>{
-    if(e.target&&e.target.closest&&e.target.closest('#rail'))return;
-    G.on=true;G.x=e.clientX;G.y=e.clientY;G.dir=0;G.travel=0;G.rev=0;
-  });
-  window.addEventListener('pointermove',e=>{
-    if(!G.on)return;
-    const dx=e.clientX-G.x,dy=e.clientY-G.y,d=Math.hypot(dx,dy);
-    if(d<6)return;
-    const dir=Math.abs(dx)>Math.abs(dy)?Math.sign(dx):Math.sign(dy);
-    if(G.dir&&dir&&dir!==G.dir)G.rev++;
-    G.dir=dir;G.travel+=d;G.x=e.clientX;G.y=e.clientY;
-    if(G.rev>=3){G.on=false;doShake(clamp(G.travel/2600,0.25,1));}
-  });
-  window.addEventListener('pointerup',()=>{G.on=false;});
-  window.addEventListener('pointercancel',()=>{G.on=false;});
-  /* DeviceMotionEvent on a phone: deviation from a slow baseline of the
-     including-gravity magnitude. Same mapping to power, same rules. */
-  const A={mean:0,last:0};
-  window.addEventListener('devicemotion',e=>{
-    const a=e.accelerationIncludingGravity;if(!a)return;
-    const m=Math.hypot(a.x||0,a.y||0,a.z||0);
-    if(!A.mean)A.mean=m;
-    A.mean=A.mean*0.92+m*0.08;
-    const dev=Math.abs(m-A.mean),now=performance.now();
-    if(dev>4.5&&now-A.last>700){A.last=now;doShake(clamp((dev-4.5)/12,0.15,1));}
-  });
-  $('b_shake').addEventListener('click',()=>{
-    const dm=window.DeviceMotionEvent;
-    if(dm&&typeof dm.requestPermission==='function'){
-      dm.requestPermission().then(r=>{
-        if(r!=='granted'){shakeMsg='motion not granted · the button still shakes';
-          shakeUntil=performance.now()+2600;paint();}
-      }).catch(()=>{});
-    }
-    doShake(1);
-  });
+
+/* ── the loop ────────────────────────────────────────────────────────────── */
+/* The app owns starburst decay, and it decays once per GENERATION (not per
+   frame), so a spark's brightness is 0.78^g at g generations after the birth and
+   is invisible (under 0.05) after about twelve, at any frame rate. A world only
+   ever sets V.spark[i] = 1 on the tick a birth happens; it must not decay the
+   array itself, and it must not carry spark state in S. */
+function decaySpark(){
+  const V=APP.V;if(!V)return;
+  const sp=V.spark;
+  for(let i=0;i<sp.length;i++)sp[i]*=0.78;
 }
-function bindOnce(){
-  $('f_any').addEventListener('change',e=>loadFile(e.target.files[0]));
-  $('f_img').addEventListener('change',e=>loadImageFile(e.target.files[0]));
-  window.addEventListener('dragover',e=>{e.preventDefault();});
-  window.addEventListener('drop',e=>{
-    e.preventDefault();
-    const f=e.dataTransfer.files[0];if(!f)return;
-    loadFile(f);                 /* picture, sound, or numbers: all waves */
-  });
-  const hr=$('r_harm');
-  hr.addEventListener('input',()=>{
-    APP.waveP=parseInt(hr.value,10);
-    if(APP.srcId==='file'&&APP.file&&APP.file.kind==='image'){deriveFile();rebuild();}
-    else $('o_harm').value=APP.waveP;
-  });
-  $('b_play').addEventListener('click',()=>{
-    playing=!playing;$('b_play').textContent=playing?'⏸ hold':'▶ run';
-    updateAudio(true);
-  });
-  $('soundchip').addEventListener('click',()=>AUDIO.enabled?stopAudio():startAudio());
-  const chooseAudioMode=mode=>{
-    AUDIO.mode=mode;
-    $('m_tone').classList.toggle('on',mode==='tone');
-    $('m_music').classList.toggle('on',mode==='music');
-    if(AUDIO.enabled)updateAudio(true);
-    else $('sound_note').textContent=mode==='music'
-      ?'Press ▶ sound. Each quarter-turn of the strain phase selects a pentatonic note; |h| sets loudness.'
-      :'Press ▶ sound. Pitch follows phase rotation; |h| sets loudness.';
-  };
-  $('m_tone').addEventListener('click',()=>chooseAudioMode('tone'));
-  $('m_music').addEventListener('click',()=>chooseAudioMode('music'));
-  $('b_step').addEventListener('click',()=>{
-    if(!APP.world||!APP.S)return;
-    try{decaySpark();APP.world.step(APP.S,APP.field,APP.pw);gen++;
+function paint(){
+  /* view() returns the CURRENT state and is cheap (measured 0.001-0.046 ms), so
+     it is called on every paint. Never cache the object across steps: worlds are
+     allowed to sync their view inside view() rather than inside step(), and a
+     cached array then shows the state from whenever it was fetched. */
+  const V=(APP.world&&APP.S)?safe(()=>APP.world.view(APP.S),null):null;
+  APP.V=V;
+  APP.gen=gen;          /* the edition stamp prints the generation it pulled at */
+  /* the press is only as registered as the operator has made it, and what the
+     sheet carries is decided by where the job has got to — not by a setting */
+  R.slipScale=pressSlip();
+  APP.sheetOpts={dead:!!(V&&liveN===0&&gen>2),
+    what:APP.world?APP.world.label:'',size:M,
+    mode:SHEET_MODE[SHOP.state]||'proof',
+    edition:{n:Math.min(SHOP.n,SHOP.N),N:SHOP.N}};
+  if(ROOMVIEW.mode==='press'){
+    SHOPVIEW.paint(V,APP.field,APP.sheetOpts);
+    ROOMVIEW.back(stageCtx());
+  }else ROOMVIEW.paint(V,APP.field,APP.sheetOpts);
+}
+function frame(){
+  const now=performance.now();
+  const dt=Math.min(0.05,(now-lastT)/1000);lastT=now;
+  R.clock=now/1000;
+  if(playing&&APP.world&&APP.S){
+    /* The press runs on a clock, not on the display's permission. A hidden or
+       throttled pane fires this interval once a second, and an accumulator that
+       adds a CLAMPED delta then never reaches one whole generation: the drive
+       is engaged, the clock is moving, and the sheet stays blank. Generations
+       are therefore counted off the wall clock, so the edition runs at the
+       speed the throttle asks for whatever the pane is doing. */
+    const due=1000/Math.max(1,speed);
+    let steps=Math.floor((now-tickClock)/due);
+    if(steps>0){
+      if(steps>120){steps=120;tickClock=now;}
+      else tickClock+=steps*due;
+      for(let i=0;i<steps;i++){
+        decaySpark();
+        try{APP.world.step(APP.S,APP.field,APP.pw);}
+        catch(e){playing=false;fail(e);break;}
+        gen++;
+      }
       liveN=safe(()=>APP.world.stats(APP.S),liveN)||0;
-      APP.hist[APP.histN%APP.hist.length]=liveN;APP.histN++;
-      recordScopePoint();
-      paint();}catch(e){fail(e);}
-  });
-  $('b_reset').addEventListener('click',reseed);
-  $('b_scope').addEventListener('click',toggleScope);
-  window.addEventListener('keydown',e=>{
-    if(e.key.toLowerCase()==='o'&&!/INPUT|TEXTAREA|SELECT/.test((e.target||{}).tagName||''))toggleScope();
-  });
-  bindShake();
-  $('chip').addEventListener('click',()=>{
-    const r=$('rail');
-    r.style.display=(getComputedStyle(r).display==='none')?'block':'none';
-    relayout();
-  });
-  const sp=$('r_speed');sp.value=speed;$('o_speed').value=speed;
-  sp.addEventListener('input',()=>{speed=parseFloat(sp.value);$('o_speed').value=speed;updateAudio(true);});
-  const volume=$('r_volume');volume.value=Math.round(AUDIO.volume*100);
-  $('o_volume').value=volume.value+'%';
-  volume.addEventListener('input',()=>{
-    AUDIO.volume=parseInt(volume.value,10)/100;$('o_volume').value=volume.value+'%';
-    updateAudio(true);
-  });
-  const sz=$('r_size');
-  sz.addEventListener('input',()=>{
-    Muser=true;M=parseInt(sz.value,10);$('o_size').value=M;
-    /* rebuilding the field on every tick freezes the drag on a long record
-       (block-averaging a 24 kHz file costs hundreds of ms), so the rebuild
-       waits for the drag to pause */
-    clearTimeout(szT);
-    szT=setTimeout(()=>{setM(M);rebuild();},90);
-  });
-  const sk=$('r_spark');sk.value=R.sparkBudget;$('o_spark').value=R.sparkBudget;
-  sk.addEventListener('input',()=>{
-    R.sparkBudget=parseInt(sk.value,10);$('o_spark').value=R.sparkBudget;
-  });
-  const gain=$('r_gain');gain.value=R.gain;$('o_gain').value=R.gain.toFixed(2)+'×';
-  gain.addEventListener('input',()=>{R.gain=parseFloat(gain.value);$('o_gain').value=R.gain.toFixed(2)+'×';paint();});
-  const offset=$('r_offset');offset.value=APP.scopeOffset;$('o_offset').value=APP.scopeOffset+'%';
-  offset.addEventListener('input',()=>{APP.scopeOffset=parseInt(offset.value,10);$('o_offset').value=APP.scopeOffset+'%';paint();updateAudio(true);});
-  window.addEventListener('resize',()=>relayout());
+      recordPopulation();
+    }
+  }else tickClock=now;
+  /* the machine is painted every frame whatever the world is doing: springs
+     settle, the flywheel coasts and the lever thumps back on its own time */
+  if(typeof SHOPVIEW!=='undefined'&&SHOPVIEW.tick)SHOPVIEW.tick(dt);
+  updateAudio(false);
+  paint();
 }
-function toggleScope(){
-  R.scope=!R.scope;
-  $('b_scope').textContent=R.scope?'◉ scope on':'○ scope off';
-  $('b_scope').classList.toggle('on',R.scope);
-  $('scope_gain').style.display=R.scope?'flex':'none';
-  $('scope_offset').style.display=R.scope?'flex':'none';
-  layout();setM(M);paint();
-}
-function relayout(){
-  const suggest=layout();
-  const sz=$('r_size');
-  sz.min=24;sz.max=120;
-  if(!Muser){M=suggest;sz.value=M;}
-  $('o_size').value=M;
-  setM(M);
-  rebuild();
+/* the impression the window can afford, in cards: the old rail-and-console
+   layout is gone, so the sheet takes the whole window and M follows it */
+function autoM(){
+  const G=(typeof SHOPVIEW!=='undefined'&&SHOPVIEW.geometry)?SHOPVIEW.geometry():null;
+  const side=(G&&G.side)?G.side:Math.min(window.innerWidth,window.innerHeight);
+  return clamp(Math.round(side/11/4)*4,16,120);
 }
 /* ── boot ────────────────────────────────────────────────────────────────── */
 (function boot(){
   try{
-    if(window.innerWidth<900)$('rail').style.display='none';
     /* the worlds have finished pushing the colours they invent, so the press
        can align the whole palette to what it can actually print */
     snapPalette();
-    $('scope_gain').style.display=R.scope?'flex':'none';
-    $('scope_offset').style.display=R.scope?'flex':'none';
-    bindOnce();
-    drawSourceChips();drawFieldChips();drawWorldChips();drawParams();
-    if(typeof prepRecord==='function'&&typeof GSFC!=='undefined'){
-      try{setSource('gsfc');}catch(e){fail(e);}
-      drawSourceChips();
-    }
-    relayout();
-    drawRecordPanel(APP.rec&&APP.rec.re?APP.rec:null);
-    if(!FIELDS.length||!WORLDS.length){
-      $('hudtxt').textContent='waiting for modules · fields '+FIELDS.length+' · worlds '+WORLDS.length;
-    }
+    if(typeof SHOPVIEW==='undefined'||!SHOPVIEW.init)
+      throw new Error('w-shop.js did not load — no machine to stand at');
+    SHOPVIEW.init();
+    M=autoM();Muser=false;setM(M);
+    if(typeof prepRecord==='function'&&typeof GSFC!=='undefined')setSource('gsfc');
+    else throw new Error('no record module: GSFC missing');
+    shopSay('JOB 001 ON THE COUNTER — the plates are off register: bring the three pins home');
+    /* Source intake loads directly; files placed on the press feed board remain
+       physical stock until they are fed into the gripper. */
+    const fa=document.getElementById('f_any');
+    if(fa)fa.addEventListener('change',e=>{
+      const f=e.target.files&&e.target.files[0],G=SHOPVIEW.geometry();
+      if(f&&ROOMVIEW.mode==='stock')API.loadStock(f);
+      else if(f&&G)SHOPVIEW.dropFiles([f],G.feed.x+G.feed.w*0.5,G.feed.y-G.s*16);
+    });
     setInterval(frame,16);
     frame();
-  }catch(e){
-    $('hudtxt').textContent='BOOT ERROR · '+((e&&e.message)||e);
-    $('hudtxt').style.color='#ff8a7a';
-  }
+    window.addEventListener('resize',()=>{
+      if(!Muser){const n=autoM();if(n!==M){M=n;setM(M);rebuild();}}
+      else paint();
+    });
+  }catch(e){ fail(e); }
 })();
