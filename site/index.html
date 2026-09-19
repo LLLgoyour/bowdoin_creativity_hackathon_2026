@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Black Hole Loom</title>
+  <style>
+    :root { color-scheme: dark; --bg:#090d19; --panel:#121a2b; --text:#edf2fa; --muted:#9facbf; --gold:#f2c37b; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:radial-gradient(circle at 75% 5%,#1d2c4d 0,#090d19 43%); color:var(--text); font:15px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    main { max-width:1180px; margin:0 auto; padding:38px 24px 52px; }
+    header { display:flex; justify-content:space-between; align-items:start; gap:24px; margin-bottom:26px; }
+    .eyebrow { color:var(--gold); font-size:11px; font-weight:800; letter-spacing:.23em; text-transform:uppercase; }
+    h1 { margin:5px 0 7px; font-family:Georgia,serif; font-weight:400; font-size:clamp(38px,6vw,68px); line-height:1; letter-spacing:-.035em; }
+    header p { max-width:700px; margin:0; color:var(--muted); }
+    .tag { white-space:nowrap; border:1px solid #536071; border-radius:100px; padding:8px 12px; color:var(--muted); font-size:12px; }
+    .panel { background:linear-gradient(140deg,#17213a,#0f1628 75%); border:1px solid #2b3a55; border-radius:18px; box-shadow:0 24px 65px #0006; overflow:hidden; }
+    .toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:15px 18px; border-bottom:1px solid #2b3a55; }
+    button,.filebutton { appearance:none; background:#222f4b; color:var(--text); border:1px solid #465574; border-radius:9px; padding:8px 12px; font:600 13px system-ui,sans-serif; cursor:pointer; }
+    button:hover,.filebutton:hover { background:#33466a; }
+    button.active { background:var(--gold); border-color:var(--gold); color:#1d2230; }
+    .spacer { flex:1; }
+    input[type=file] { display:none; }
+    .canvas-wrap { padding:24px; }
+    .topline { display:flex; justify-content:space-between; gap:12px; align-items:baseline; margin-bottom:12px; }
+    h2 { margin:0; font-family:Georgia,serif; font-size:22px; font-weight:400; }
+    .detail { color:var(--muted); font-size:12px; }
+    svg { display:block; width:100%; height:auto; }
+    #grid { border:1px solid #384765; background:#0a1223; border-radius:7px; cursor:crosshair; }
+    #grid.disc { max-width:650px; margin:auto; }
+    #trace { margin-top:16px; border-top:1px solid #33405a; }
+    .legend { display:flex; gap:18px; flex-wrap:wrap; color:var(--muted); font-size:12px; margin-top:14px; }
+    .swatch { display:inline-block; width:14px; height:14px; vertical-align:-2px; border-radius:2px; margin-right:5px; }
+    .scale { width:130px; height:12px; display:inline-block; margin:0 6px; border-radius:2px; vertical-align:-1px; background:linear-gradient(90deg,hsl(0 78% 63%),hsl(60 78% 63%),hsl(120 78% 63%),hsl(180 78% 63%),hsl(240 78% 63%),hsl(300 78% 63%),hsl(360 78% 63%)); }
+    footer { color:#8492aa; font-size:12px; margin-top:22px; }
+    footer a { color:#c6d7f2; }
+    .hint { color:var(--gold); }
+    @media(max-width:700px) { main{padding:22px 12px} header{display:block} .tag{display:inline-block;margin-top:15px} .canvas-wrap{padding:14px} }
+    @media print { @page{size:landscape;margin:12mm} :root{color-scheme:light} body{background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact} main{max-width:none;padding:0} header{margin-bottom:16px} .tag,.toolbar,footer{display:none} .panel{box-shadow:none;border:0;background:#fff} .canvas-wrap{padding:0} h1,h2{color:#121a2b} header p,.detail,.legend{color:#38435a} #grid{width:100%;max-height:150mm} #grid.disc{max-width:150mm} #trace{max-height:30mm} }
+  </style>
+  <script src="data.js"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <div class="eyebrow">Creativity Hackathon · Data as Material</div>
+        <h1>Black Hole Loom</h1>
+        <p>A simulated black-hole merger becomes a living score. The original grid maps one waveform sample to each cell; a tapestry records its generations, and a disc lets the waveform pulse through them.</p>
+      </div>
+      <span class="tag">GSFC R1 · equal mass · zero spin</span>
+    </header>
+    <section class="panel">
+      <div class="toolbar">
+        <button id="weave" class="active">Data weave</button>
+        <button id="life">Cellular life</button>
+        <button id="tapestry">Chirp tapestry</button>
+        <button id="disc">Resonance disc</button>
+        <button id="play">▶ Play</button>
+        <button id="step">Step</button>
+        <button id="reset">Reset</button>
+        <span class="spacer"></span>
+        <label class="filebutton">Load .dat<input id="file" type="file" accept=".dat,.txt,text/plain"></label>
+        <button id="pdf">Export PDF</button>
+      </div>
+      <div class="canvas-wrap">
+        <div class="topline"><h2 id="subtitle">The merger waveform</h2><div class="detail" id="status"></div></div>
+        <svg id="grid" role="img" aria-label="Art generated from black hole waveform samples"></svg>
+        <svg id="trace" role="img" aria-label="Amplitude across the source waveform"></svg>
+        <div class="legend">
+          <span><span class="scale"></span> color = source waveform phase</span>
+          <span><span class="swatch" style="background:#293858"></span>brightness = source amplitude + living cells</span>
+          <span><span class="swatch" style="border:2px solid #f2c37b"></span>gold outline = visitor edit</span>
+        </div>
+        <div class="detail hint" id="hint" style="margin-top:10px">Click cells to add your own stitches. Switch to Cellular life to let those edits affect the next generation.</div>
+      </div>
+    </section>
+    <footer>Source: <a href="https://asd.gsfc.nasa.gov/archive/astrogravs/docs/waveforms/NRmergers/" target="_blank" rel="noopener">NASA GSFC AstroGravS waveform catalog</a>. The first view uses the supplied GSFC_QC6_strain_2_2.dat simulation. The time coordinate is shown as provided, without claiming a physical time in seconds. The disc's rings are an artistic response to the data, not an image of physical spacetime.</footer>
+  </main>
+  <script>
+    const NS = 'http://www.w3.org/2000/svg';
+    const grid = document.getElementById('grid');
+    const trace = document.getElementById('trace');
+    const status = document.getElementById('status');
+    const subtitle = document.getElementById('subtitle');
+    const hint = document.getElementById('hint');
+    const cols = 36, cell = 20, tapestryBins = 110, maxGenerations = 64;
+    let samples = [], maxAmp = 1, mode = 'weave', reveal = 0, generation = 0, hasLife = false;
+    let edited = new Set(), alive = [], history = [], timer = null;
+
+    function svgEl(name, attrs = {}) {
+      const el = document.createElementNS(NS, name);
+      for (const [key, value] of Object.entries(attrs)) el.setAttribute(key, value);
+      return el;
+    }
+    function setData(rows) {
+      stop();
+      const parsed = rows.map(r => ({t:Number(r[0]), re:Number(r[1]), im:Number(r[2])}))
+        .filter(r => [r.t,r.re,r.im].every(Number.isFinite));
+      if (parsed.length<2) throw new Error('Expected at least two rows: time Re(h) Im(h)');
+      samples = parsed.map(r => ({...r, amp:Math.hypot(r.re,r.im), phase:Math.atan2(r.im,r.re)}));
+      maxAmp = Math.max(...samples.map(r => r.amp)) || 1;
+      edited.clear();
+      reveal = samples.length;
+      generation = 0;
+      hasLife = false;
+      history = [];
+      mode = 'weave';
+      syncMode();
+      render();
+    }
+    function color(s, multiplier = 1) {
+      const hue = ((s.phase + Math.PI) / (2*Math.PI))*360;
+      const intensity = Math.sqrt(s.amp/maxAmp);
+      return `hsl(${hue.toFixed(1)} 78% ${(13+56*intensity*multiplier).toFixed(1)}%)`;
+    }
+    function seed() {
+      const amps = samples.map(s=>s.amp).sort((a,b)=>a-b);
+      const threshold = amps[Math.floor(amps.length*0.55)];
+      alive = samples.map((s,i) => (s.amp >= threshold && s.re > 0) !== edited.has(i));
+      generation = 0;
+      hasLife = true;
+      history = [alive.slice()];
+    }
+    function syncMode() {
+      for (const name of ['weave','life','tapestry','disc'])
+        document.getElementById(name).classList.toggle('active', mode === name);
+      grid.classList.toggle('disc',mode === 'disc');
+      subtitle.textContent = ({weave:'The merger waveform',life:'The waveform becomes a living pattern',
+        tapestry:'A record of every generation',disc:'A living resonance plate'})[mode];
+      hint.textContent = ({
+        weave:'Click cells to add your own stitches. They become edits to the Life seed.',
+        life:'Click to change a cell. Step or Play applies standard Game of Life rules for up to 64 generations.',
+        tapestry:'Time runs left to right; each new row records one Life generation. Click the newest row to edit its time slice.',
+        disc:'The same Life cells are arranged as a disc. Click sectors to edit; the source waveform drives visitor-shaped pulse rings.'
+      })[mode];
+    }
+    function render() {
+      if(mode === 'tapestry') renderTapestry();
+      else if(mode === 'disc') renderDisc();
+      else renderCells();
+      status.textContent=mode==='weave'
+        ? `${samples.length} samples · ${reveal} revealed · peak amplitude ${maxAmp.toFixed(4)}`
+        : `generation ${generation}/${maxGenerations} · ${alive.filter(Boolean).length} living cells${mode==='disc' ? ` · pulse t=${samples[sourceIndex()].t.toFixed(1)}` : ''}`;
+      drawTrace();
+    }
+    function renderCells() {
+      const rows = Math.ceil(samples.length/cols), width=cols*cell, height=rows*cell;
+      grid.setAttribute('viewBox',`0 0 ${width} ${height}`);
+      grid.replaceChildren();
+      const fragment = document.createDocumentFragment();
+      samples.forEach((s,i) => {
+        const row=Math.floor(i/cols), col=i%cols;
+        const x=(row%2 ? cols-1-col : col)*cell;
+        const visible = mode === 'weave' ? i < reveal : alive[i];
+        const rect=svgEl('rect',{
+          x:x+1,y:row*cell+1,width:cell-2,height:cell-2,rx:2,
+          fill:visible ? color(s,mode==='life'?1.15:1) : '#111a2d',
+          stroke:edited.has(i)?'#f2c37b':'#26354e',
+          'stroke-width':edited.has(i)?2:0.7,
+          'data-index':i
+        });
+        const label=svgEl('title');
+        label.textContent=`sample ${i+1} · t=${s.t.toFixed(3)} · amplitude=${s.amp.toFixed(4)} · phase=${s.phase.toFixed(2)} rad`;
+        rect.appendChild(label); fragment.appendChild(rect);
+      });
+      grid.appendChild(fragment);
+    }
+    function sourceIndex() {
+      return Math.min(samples.length-1,Math.floor(generation/maxGenerations*(samples.length-1)));
+    }
+    function renderTapestry() {
+      const binCount=Math.min(tapestryBins,samples.length);
+      const left=42, top=33, rowH=9, plotW=880, binW=plotW/binCount;
+      const height=top+history.length*rowH+37;
+      grid.setAttribute('viewBox',`0 0 965 ${height}`);
+      grid.replaceChildren();
+      grid.appendChild(svgEl('rect',{x:left,y:top,width:plotW,height:history.length*rowH,fill:'#10192b'}));
+      const fragment=document.createDocumentFragment();
+      history.forEach((state,g)=>{
+        for(let b=0;b<binCount;b++) {
+          const first=Math.floor(b*samples.length/binCount);
+          const end=Math.floor((b+1)*samples.length/binCount);
+          let living=0;
+          for(let i=first;i<end;i++) living+=Number(state[i]);
+          const fraction=living/(end-first);
+          const sample=samples[Math.floor((first+end-1)/2)];
+          const attrs={
+            x:left+b*binW+.55,y:top+g*rowH+.55,width:binW-1.1,height:rowH-1.1,rx:.8,
+            fill:fraction ? color(sample,.48+fraction*.65) : '#17213a',
+            opacity:fraction ? .45+fraction*.55 : .8,
+            'data-generation':g
+          };
+          if(g===history.length-1)attrs['data-bin']=b;
+          const rect=svgEl('rect',attrs);
+          const label=svgEl('title');
+          label.textContent=`generation ${g} · simulation time ${samples[first].t.toFixed(1)}–${samples[end-1].t.toFixed(1)} · ${living}/${end-first} living`;
+          rect.appendChild(label);fragment.appendChild(rect);
+        }
+        if(g%8===0 || g===history.length-1) {
+          const label=svgEl('text',{x:34,y:top+g*rowH+7,fill:'#9facbf','font-size':10,'text-anchor':'end'});
+          label.textContent=g; fragment.appendChild(label);
+        }
+      });
+      grid.appendChild(fragment);
+      const cursorLine=history.map((_,g)=>{
+        const x=left+(g/maxGenerations)*plotW;
+        return `${g?'L':'M'}${x.toFixed(2)},${(top+g*rowH+rowH/2).toFixed(2)}`;
+      }).join(' ');
+      grid.appendChild(svgEl('path',{d:cursorLine,fill:'none',stroke:'#f2c37b',opacity:.78,
+        'stroke-width':1.5,'pointer-events':'none'}));
+      const addLabel=(x,y,text)=>{const el=svgEl('text',{x,y,fill:'#b8c7dd','font-size':11});el.textContent=text;grid.appendChild(el);};
+      addLabel(left,20,'SIMULATION TIME  →');
+      addLabel(8,20,'GEN');
+      addLabel(left,height-13,samples[0].t.toFixed(1));
+      addLabel(left+plotW/2-20,height-13,samples[Math.floor(samples.length/2)].t.toFixed(1));
+      addLabel(left+plotW-38,height-13,samples.at(-1).t.toFixed(1));
+    }
+    function point(cx,cy,r,angle) {
+      return [cx+r*Math.cos(angle),cy+r*Math.sin(angle)];
+    }
+    function sectorPath(r0,r1,c) {
+      const a0=-Math.PI/2+(c+.07)*2*Math.PI/cols;
+      const a1=-Math.PI/2+(c+.93)*2*Math.PI/cols;
+      const [x0,y0]=point(300,300,r0,a0),[x1,y1]=point(300,300,r1,a0);
+      const [x2,y2]=point(300,300,r1,a1),[x3,y3]=point(300,300,r0,a1);
+      return `M${x0},${y0} L${x1},${y1} A${r1},${r1} 0 0 1 ${x2},${y2} L${x3},${y3} A${r0},${r0} 0 0 0 ${x0},${y0} Z`;
+    }
+    function renderDisc() {
+      grid.setAttribute('viewBox','0 0 600 600');
+      grid.replaceChildren();
+      grid.appendChild(svgEl('circle',{cx:300,cy:300,r:267,fill:'#0e1729',stroke:'#33415d','stroke-width':1.5}));
+      for(const r of [74,124,174,224])
+        grid.appendChild(svgEl('circle',{cx:300,cy:300,r,fill:'none',stroke:'#233350','stroke-width':1}));
+      const fragment=document.createDocumentFragment();
+      samples.forEach((s,i)=>{
+        const [row,c]=[Math.floor(i/cols),i%cols], r0=27+row*10.5;
+        const path=svgEl('path',{
+          d:sectorPath(r0,r0+8.6,c),
+          fill:alive[i]?color(s,1.05):'#1a2840',
+          stroke:edited.has(i)?'#f2c37b':'#263752',
+          'stroke-width':edited.has(i)?1.7:.5,
+          'data-index':i
+        });
+        const title=svgEl('title'); title.textContent=`cell ${i+1} · t=${s.t.toFixed(2)} · amplitude=${s.amp.toFixed(4)}`;
+        path.appendChild(title); fragment.appendChild(path);
+      });
+      grid.appendChild(fragment);
+      const cursor=sourceIndex();
+      for(let ring=3;ring>=0;ring--) {
+        const r=63+ring*56, source=samples[Math.max(0,cursor-ring*8)];
+        const intensity=Math.sqrt(source.amp/maxAmp);
+        let d='';
+        for(let j=0;j<=72;j++) {
+          const c=Math.floor(j/2)%cols, row=Math.min(Math.floor((r-27)/10.5),Math.ceil(samples.length/cols)-1);
+          const neighbors=[-1,0,1].reduce((sum,dc)=>sum+Number(alive[row*cols+(c+dc+cols)%cols]||false),0)/3;
+          const distance=r+neighbors*10*intensity;
+          const [x,y]=point(300,300,distance,-Math.PI/2+j*2*Math.PI/72);
+          d+=`${j?'L':'M'}${x.toFixed(2)},${y.toFixed(2)} `;
+        }
+        grid.appendChild(svgEl('path',{d,fill:'none',stroke:color(source,1.35),
+          opacity:(.12+intensity*.73).toFixed(2),'stroke-width':(1+intensity*2.5).toFixed(2),
+          'pointer-events':'none'}));
+      }
+      const source=samples[cursor];
+      grid.appendChild(svgEl('circle',{cx:300,cy:300,r:12+source.amp/maxAmp*9,fill:color(source,1.35),opacity:.7,'pointer-events':'none'}));
+      const label=svgEl('text',{x:300,y:579,'text-anchor':'middle',fill:'#aebfda','font-size':13});
+      label.textContent=`SOURCE PULSE  ·  t ${source.t.toFixed(1)}  ·  A ${source.amp.toFixed(3)}`;
+      grid.appendChild(label);
+    }
+    function drawTrace() {
+      const w=720,h=76,pad=8;
+      trace.setAttribute('viewBox',`0 0 ${w} ${h}`);
+      trace.replaceChildren();
+      const d=samples.map((s,i)=>`${i?'L':'M'}${(i/(samples.length-1)*w).toFixed(2)},${(h-pad-(s.amp/maxAmp)*(h-2*pad)).toFixed(2)}`).join(' ');
+      trace.appendChild(svgEl('path',{d,fill:'none',stroke:'#f2c37b','stroke-width':1.6,'vector-effect':'non-scaling-stroke'}));
+      const progress=mode==='weave'?reveal/samples.length:sourceIndex()/Math.max(1,samples.length-1);
+      trace.appendChild(svgEl('line',{x1:progress*w,x2:progress*w,y1:0,y2:h,stroke:'#c7d4e9','stroke-width':1}));
+    }
+    function stop() { if(timer) clearInterval(timer); timer=null; document.getElementById('play').textContent='▶ Play'; }
+    function advance() {
+      if(mode==='weave') { reveal=Math.min(samples.length,reveal+Math.max(1,Math.ceil(samples.length/80))); if(reveal===samples.length)stop(); }
+      else {
+        if(generation>=maxGenerations){stop();return;}
+        const next=alive.map((current,i)=>{
+          const r=Math.floor(i/cols), c=i%cols; let neighbors=0;
+          for(let dr=-1;dr<=1;dr++) for(let dc=-1;dc<=1;dc++) {
+            if(!dr&&!dc)continue;
+            const nr=r+dr,nc=c+dc,ni=nr*cols+nc;
+            if(nr>=0&&nr<Math.ceil(samples.length/cols)&&nc>=0&&nc<cols&&ni<samples.length&&alive[ni])neighbors++;
+          }
+          return current ? neighbors===2||neighbors===3 : neighbors===3;
+        });
+        alive=next; generation++; history.push(alive.slice());
+        if(generation>=maxGenerations)stop();
+      }
+      render();
+    }
+    grid.addEventListener('click',event=>{
+      const target=event.target.closest('[data-index],[data-bin]'); if(!target)return;
+      if(mode==='tapestry') {
+        const binCount=Math.min(tapestryBins,samples.length);
+        const bin=Number(target.dataset.bin), first=Math.floor(bin*samples.length/binCount);
+        const end=Math.floor((bin+1)*samples.length/binCount);
+        const turnOn=!alive.slice(first,end).some(Boolean);
+        for(let i=first;i<end;i++){alive[i]=turnOn;edited.add(i);}
+      } else {
+        const i=Number(target.dataset.index);
+        if(mode==='weave') { edited.has(i)?edited.delete(i):edited.add(i);if(hasLife)alive[i]=!alive[i]; }
+        else { alive[i]=!alive[i]; edited.add(i); }
+      }
+      if(hasLife)history[generation]=alive.slice();
+      render();
+    });
+    function switchMode(next) {
+      stop();
+      if(next!=='weave'&&!hasLife)seed();
+      mode=next;
+      if(next==='weave')reveal=samples.length;
+      syncMode();render();
+    }
+    for(const name of ['weave','life','tapestry','disc'])
+      document.getElementById(name).onclick=()=>switchMode(name);
+    document.getElementById('play').onclick=()=>{
+      if(timer){stop();return;}
+      if(mode==='weave'&&reveal===samples.length)reveal=0;
+      if(mode!=='weave'&&generation>=maxGenerations)return;
+      document.getElementById('play').textContent='Ⅱ Pause';
+      timer=setInterval(advance,mode==='weave'?60:240);
+    };
+    document.getElementById('step').onclick=()=>{stop();advance();};
+    document.getElementById('reset').onclick=()=>{stop();edited.clear();if(mode==='weave'){hasLife=false;history=[];reveal=samples.length;}else seed();render();};
+    document.getElementById('pdf').onclick=()=>{stop();window.print();};
+    document.getElementById('file').onchange=async event=>{
+      const file=event.target.files[0]; if(!file)return;
+      try {
+        const text=await file.text();
+        const rows=text.split(/\r?\n/).filter(line=>line.trim()&&!line.trim().startsWith('#'))
+          .map(line=>line.trim().split(/[\s,]+/).slice(0,3));
+        setData(rows);
+      } catch(error) { alert(error.message); }
+    };
+    setData(window.DEFAULT_WAVEFORM || []);
+  </script>
+</body>
+</html>
