@@ -14,6 +14,8 @@
     h1 { margin:5px 0 7px; font-family:Georgia,serif; font-weight:400; font-size:clamp(38px,6vw,68px); line-height:1; letter-spacing:-.035em; }
     header p { max-width:700px; margin:0; color:var(--muted); }
     .tag { white-space:nowrap; border:1px solid #536071; border-radius:100px; padding:8px 12px; color:var(--muted); font-size:12px; }
+    .actions { display:flex; flex-direction:column; align-items:flex-end; gap:10px; }
+    a.filebutton { display:inline-block; text-decoration:none; }
     .panel { background:linear-gradient(140deg,#17213a,#0f1628 75%); border:1px solid #2b3a55; border-radius:18px; box-shadow:0 24px 65px #0006; overflow:hidden; }
     .toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:15px 18px; border-bottom:1px solid #2b3a55; }
     button,.filebutton { appearance:none; background:#222f4b; color:var(--text); border:1px solid #465574; border-radius:9px; padding:8px 12px; font:600 13px system-ui,sans-serif; cursor:pointer; }
@@ -48,7 +50,10 @@
         <h1>Black Hole Loom</h1>
         <p>A simulated black-hole merger becomes a living score. The original grid maps one waveform sample to each cell; a tapestry records its generations, and a disc lets the waveform pulse through them.</p>
       </div>
-      <span class="tag">GSFC R1 · equal mass · zero spin</span>
+      <div class="actions">
+        <a class="filebutton" href="strain-worlds/">Enter the press room →</a>
+        <span class="tag">GSFC R1 · equal mass · zero spin</span>
+      </div>
     </header>
     <section class="panel">
       <div class="toolbar">
