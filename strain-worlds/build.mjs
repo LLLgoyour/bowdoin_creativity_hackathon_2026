@@ -2,8 +2,9 @@
    The load order in shell.html is the single source of truth. */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = dirname(new URL(import.meta.url).pathname);
+const root = dirname(fileURLToPath(import.meta.url));
 let html = readFileSync(resolve(root, 'shell.html'), 'utf8');
 const tags = [...html.matchAll(/[ \t]*<script src="([^"]+)"><\/script>\n?/g)];
 if (!tags.length) throw new Error('no <script src> tags found in shell.html');

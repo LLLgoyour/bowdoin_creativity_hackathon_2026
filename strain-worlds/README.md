@@ -29,13 +29,35 @@ estimated, and where a quantity has two defensible estimators, both are given.
 
 ## Run it
 
-    open ../strain-worlds.html     # the built single file, no server, no deps
+    open builds/strain-worlds.html  # the built single file, no server, no deps
 
 `shell.html` loads `src/*.js` as classic scripts and also works straight off
 `file://`. Rebuild the single file after editing `src/`:
 
-    node build.mjs                 # inlines src/ + data into ../strain-worlds.html
+    node build.mjs builds/strain-worlds.html # rebuild the demo in this folder
     node tools/embed.mjs           # regenerates src/data-gsfc.js from the .dat
+
+## Oscilloscope view
+
+The default stage pairs the evolving card world with a CRT-style reading of the
+source. CH1 and CH2 show the actual `Re(h)` and `Im(h)` samples from the GSFC
+record, with a moving scan line and phosphor afterglow. The third trace measures
+the world: global phase order `r` for SYNCHRONY, or the fraction of live board
+cells for the other three rules. Its range expands to make small changes visible;
+the displayed percentage remains the real measurement. The source advances by
+`round(sample count / 360)` samples per generation (two for the GSFC file), and
+wraps at the end. The sweep starts at 40% of the record so the larger strain is
+visible immediately; the sweep-offset slider can take it back to the start.
+This scan is a reading of the original record: it does not
+inject a new driving signal into the world, which continues to read the complete
+mapped field each step.
+
+Use **scope on/off** in PLAY, or press **O**, to switch between the paired view
+and the original full-screen paper board. **Scope gain** changes only the
+vertical display scale of the two source traces; it never changes the samples.
+**Sweep offset** moves only the scan line, also leaving the samples unchanged.
+Pause, step, reseed and shake still work in either view. Numeric files dropped
+onto the page use the same two-channel scope; images show the world trace alone.
 
 ## The record
 

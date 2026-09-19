@@ -10,7 +10,8 @@ const APP = {
      path/matrix/spectro/hst) while life on path, whose 79%-dense mask is
      dominated by its boundary at that size, dies out within a few generations. */
   srcId:'gsfc', fldId:'path', wrldId:'synch', seed:20260919,
-  par:{field:{}, worlds:{}}, hist:new Int32Array(420), histN:0
+  par:{field:{}, worlds:{}}, hist:new Int32Array(420), histN:0,
+  scopeHist:new Float32Array(420),scopeN:0,scopeOffset:40
 };
 let M=52, Muser=false, speed=10, playing=true, gen=0, liveN=0,
     acc=0, lastT=performance.now(), lastErr='',
@@ -112,6 +113,14 @@ function startWorld(){
   gen=0;liveN=safe(()=>w.stats(APP.S),0)||0;
   APP.histN=0;APP.hist.fill(0);
   APP.hist[0]=liveN;APP.histN=1;
+  APP.scopeN=0;APP.scopeHist.fill(0);recordScopePoint();
+}
+function scopeStride(rec){return rec&&rec.re?Math.max(1,Math.round(rec.re.length/360)):1;}
+function scopeIndex(rec){return rec&&rec.re?(Math.floor(rec.re.length*APP.scopeOffset/100)+gen*scopeStride(rec))%rec.re.length:-1;}
+function recordScopePoint(){
+  const value=APP.wrldId==='synch'&&APP.S?APP.S.order:liveN/Math.max(1,M*M);
+  APP.scopeHist[APP.scopeN%APP.scopeHist.length]=clamp(value,0,1);
+  APP.scopeN++;
 }
 function rebuild(){
   try{
@@ -149,8 +158,12 @@ function paint(){
      cached array then shows the state from whenever it was fetched. */
   const V=(APP.world&&APP.S)?safe(()=>APP.world.view(APP.S),null):null;
   APP.V=V;
+  const rec=APP.rec&&APP.rec.re?APP.rec:null,scan=scopeIndex(rec);
   drawStage(V,APP.field,{dead:!!(V&&liveN===0&&gen>2),
-    what:APP.world?APP.world.label:'',size:M});
+    what:APP.world?APP.world.label:'',size:M,rec,scan,
+    stride:scopeStride(rec),response:APP.scopeHist,responseN:APP.scopeN,
+    responseLabel:APP.wrldId==='synch'?'global order r':'live / board'});
+  if(R.scope)drawRecordPanel(rec,scan);
   drawPopPanel(APP.hist,APP.histN,liveN);
   updateHud();
 }
@@ -172,6 +185,7 @@ function frame(){
       }
       liveN=safe(()=>APP.world.stats(APP.S),liveN)||0;
       APP.hist[APP.histN%APP.hist.length]=liveN;APP.histN++;
+      recordScopePoint();
       paint();
     }
   }
@@ -405,9 +419,14 @@ function bindOnce(){
     try{decaySpark();APP.world.step(APP.S,APP.field,APP.pw);gen++;
       liveN=safe(()=>APP.world.stats(APP.S),liveN)||0;
       APP.hist[APP.histN%APP.hist.length]=liveN;APP.histN++;
+      recordScopePoint();
       paint();}catch(e){fail(e);}
   });
   $('b_reset').addEventListener('click',reseed);
+  $('b_scope').addEventListener('click',toggleScope);
+  window.addEventListener('keydown',e=>{
+    if(e.key.toLowerCase()==='o'&&!/INPUT|TEXTAREA|SELECT/.test((e.target||{}).tagName||''))toggleScope();
+  });
   bindShake();
   $('chip').addEventListener('click',()=>{
     const r=$('rail');
@@ -429,7 +448,19 @@ function bindOnce(){
   sk.addEventListener('input',()=>{
     R.sparkBudget=parseInt(sk.value,10);$('o_spark').value=R.sparkBudget;
   });
+  const gain=$('r_gain');gain.value=R.gain;$('o_gain').value=R.gain.toFixed(2)+'×';
+  gain.addEventListener('input',()=>{R.gain=parseFloat(gain.value);$('o_gain').value=R.gain.toFixed(2)+'×';paint();});
+  const offset=$('r_offset');offset.value=APP.scopeOffset;$('o_offset').value=APP.scopeOffset+'%';
+  offset.addEventListener('input',()=>{APP.scopeOffset=parseInt(offset.value,10);$('o_offset').value=APP.scopeOffset+'%';paint();});
   window.addEventListener('resize',()=>relayout());
+}
+function toggleScope(){
+  R.scope=!R.scope;
+  $('b_scope').textContent=R.scope?'◉ scope on':'○ scope off';
+  $('b_scope').classList.toggle('on',R.scope);
+  $('scope_gain').style.display=R.scope?'flex':'none';
+  $('scope_offset').style.display=R.scope?'flex':'none';
+  layout();setM(M);paint();
 }
 function relayout(){
   const suggest=layout();
@@ -444,6 +475,8 @@ function relayout(){
 (function boot(){
   try{
     if(window.innerWidth<900)$('rail').style.display='none';
+    $('scope_gain').style.display=R.scope?'flex':'none';
+    $('scope_offset').style.display=R.scope?'flex':'none';
     bindOnce();
     drawSourceChips();drawFieldChips();drawWorldChips();drawParams();
     if(typeof prepRecord==='function'&&typeof GSFC!=='undefined'){

@@ -39,6 +39,7 @@ canvas.panel{display:block;width:100%;border:3px solid #2a1a10;border-radius:11p
 #ticker{position:fixed;left:306px;right:0;bottom:0;z-index:4;padding:5px 12px;
   background:linear-gradient(transparent,rgba(6,9,17,.92));font-size:11.5px;color:#f6c344;
   letter-spacing:.04em;text-align:center;pointer-events:none}
+#scope_gain,#scope_offset{display:none}
 </style></head><body>
 <canvas id="stage"></canvas>
 <div id="chip">panel</div>
@@ -72,10 +73,13 @@ canvas.panel{display:block;width:100%;border:3px solid #2a1a10;border-radius:11p
       <div class="chip" id="b_step">step</div>
       <div class="chip" id="b_reset">reseed</div>
       <div class="chip" id="b_shake">shake</div>
+      <div class="chip on" id="b_scope">◉ scope on</div>
     </div>
     <div class="row"><label>speed</label><input type="range" id="r_speed" min="0" max="60" step="1"><output id="o_speed"></output></div>
     <div class="row"><label>world size</label><input type="range" id="r_size" min="24" max="120" step="4"><output id="o_size"></output></div>
     <div class="row"><label>starbursts</label><input type="range" id="r_spark" min="0" max="40" step="1"><output id="o_spark"></output></div>
+    <div class="row" id="scope_gain"><label>scope gain</label><input type="range" id="r_gain" min="1" max="8" step="0.25"><output id="o_gain"></output></div>
+    <div class="row" id="scope_offset"><label>sweep offset</label><input type="range" id="r_offset" min="0" max="100" step="1"><output id="o_offset"></output></div>
     <canvas class="panel" id="c_pop" width="272" height="66"></canvas>
     <div id="hudtxt"></div>
   </fieldset>
