@@ -36,12 +36,12 @@ estimated, and where a quantity has two defensible estimators, both are given.
 
 ## Run it
 
-    open ../strain-worlds.html     # the built single file, no server, no deps
+    open builds/strain-worlds.html  # the built single file, no server, no deps
 
 `shell.html` loads `src/*.js` as classic scripts and also works straight off
 `file://`. Rebuild the single file after editing `src/`:
 
-    node build.mjs                 # inlines src/ + data into ../strain-worlds.html
+    node build.mjs builds/strain-worlds.html # rebuild the demo in this folder
     node tools/embed.mjs           # regenerates src/data-gsfc.js from the .dat
 
 ## The press
@@ -98,6 +98,46 @@ is never smaller than 0.78 of a dot — the rule a printer actually works to.
 three solids, their half tints and all four overprints — printed *through the
 same three plates* as the image, because a control strip that was composited
 separately would not show the registration slip it exists to reveal.
+
+## Oscilloscope view
+
+The default stage pairs the evolving card world with a CRT-style reading of the
+source. CH1 and CH2 show the actual `Re(h)` and `Im(h)` samples from the GSFC
+record, with a moving scan line and phosphor afterglow. The third trace measures
+the world: global phase order `r` for SYNCHRONY, or the fraction of live board
+cells for the other three rules. Its range expands to make small changes visible;
+the displayed percentage remains the real measurement. The source advances by
+`round(sample count / 360)` samples per generation (two for the GSFC file), and
+wraps at the end. The sweep starts at 40% of the record so the larger strain is
+visible immediately; the sweep-offset slider can take it back to the start.
+This scan is a reading of the original record: it does not
+inject a new driving signal into the world, which continues to read the complete
+mapped field each step.
+
+Use **scope on/off** in THE PULL, or press **O**, to switch between the paired view
+and the original full-screen paper board. **Scope gain** changes only the
+vertical display scale of the two source traces; it never changes the samples.
+**Sweep offset** moves only the scan line, also leaving the samples unchanged.
+Pause, step, reseed and shake still work in either view. Numeric, image, and
+audio files converted into complex waveforms also use the two-channel scope.
+
+## Hear the strain
+
+Press **▶ sound** at the top of the page to start Web Audio after a user gesture.
+The synth follows the oscilloscope's sample cursor, and mutes when the world is
+paused. **Strain tone** maps the record's phase-rotation rate, shifted into
+the audible range, to continuous pitch. **Phase music** maps each quarter-turn
+of phase to the next note of a C pentatonic pattern. In both modes the measured
+amplitude `|h|` controls loudness, `Re(h)/|h|` controls stereo position, and
+amplitude also opens a low-pass filter. The volume slider affects only output
+level. The sound is a sonification of numerical data, not a microphone recording
+or a claim about sound propagating through space. The mapping is tested by
+`node tools/probe-sonify.mjs`.
+
+`node tools/render-sonification.mjs` also creates
+`builds/gsfc-phase-music.wav`, a 28-second full-record preview of the melodic
+mapping. The interactive single-file page makes its audio live in Web Audio
+and does not need the WAV file.
 
 ## The record
 
