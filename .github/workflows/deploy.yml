@@ -40,13 +40,19 @@ jobs:
           FTP_SERVER_DIR: /automata
         run: python3 scripts/deploy_ftp.py
 
-      - name: Verify public website
+      # GitHub runners can receive a Cloudflare bot challenge (403) even when
+      # visitors can load the site. Check the origin's HTTPS vhost directly.
+      - name: Verify origin HTTPS website
+        env:
+          ORIGIN_IP: ${{ secrets.FTP_SERVER }}
         run: |
-          status=$(curl --silent --show-error --location --max-time 30 \
-            --output /tmp/automata-home.html --write-out '%{http_code}' \
-            "https://automata.lllgoyour.com/?deploy=${GITHUB_SHA}")
-          echo "Public homepage HTTP status: ${status}"
-          if [ "${status}" != "200" ] || ! grep -q '<title>Black Hole Loom</title>' /tmp/automata-home.html; then
-            echo '::error::FTP transfer completed, but automata.lllgoyour.com is not serving site/index.html. Check that FTP_SERVER_DIR matches the subdomain Document Root in the hosting panel.'
+          if ! curl --fail --silent --show-error --location --max-time 30 \
+            --resolve "automata.lllgoyour.com:443:${ORIGIN_IP}" \
+            --output /tmp/automata-home.html https://automata.lllgoyour.com/; then
+            echo '::error::The origin HTTPS virtual host must serve /automata and have a certificate for automata.lllgoyour.com.'
+            exit 1
+          fi
+          if ! grep -q '<title>Black Hole Loom</title>' /tmp/automata-home.html; then
+            echo '::error::Origin HTTPS responds, but does not serve site/index.html from /automata.'
             exit 1
           fi
