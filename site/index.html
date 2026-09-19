@@ -37,8 +37,14 @@
     footer { color:#8492aa; font-size:12px; margin-top:22px; }
     footer a { color:#c6d7f2; }
     .hint { color:var(--gold); }
+    .experiences { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin-top:18px; }
+    .experience { padding:19px; }
+    .experience h2 { font-size:20px; margin-bottom:7px; }
+    .experience p { margin:0 0 15px; color:var(--muted); font-size:13px; }
+    .experience .filebutton { margin:0 8px 8px 0; }
     @media(max-width:700px) { main{padding:22px 12px} header{display:block} .tag{display:inline-block;margin-top:15px} .canvas-wrap{padding:14px} }
-    @media print { @page{size:landscape;margin:12mm} :root{color-scheme:light} body{background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact} main{max-width:none;padding:0} header{margin-bottom:16px} .tag,.toolbar,footer{display:none} .panel{box-shadow:none;border:0;background:#fff} .canvas-wrap{padding:0} h1,h2{color:#121a2b} header p,.detail,.legend{color:#38435a} #grid{width:100%;max-height:150mm} #grid.disc{max-width:150mm} #trace{max-height:30mm} }
+    @media(max-width:700px) { .experiences{grid-template-columns:1fr} }
+    @media print { @page{size:landscape;margin:12mm} :root{color-scheme:light} body{background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact} main{max-width:none;padding:0} header{margin-bottom:16px} .tag,.toolbar,footer,.experiences{display:none} .panel{box-shadow:none;border:0;background:#fff} .canvas-wrap{padding:0} h1,h2{color:#121a2b} header p,.detail,.legend{color:#38435a} #grid{width:100%;max-height:150mm} #grid.disc{max-width:150mm} #trace{max-height:30mm} }
   </style>
   <script src="data.js"></script>
 </head>
@@ -78,6 +84,19 @@
           <span><span class="swatch" style="border:2px solid #f2c37b"></span>gold outline = visitor edit</span>
         </div>
         <div class="detail hint" id="hint" style="margin-top:10px">Click cells to add your own stitches. Switch to Cellular life to let those edits affect the next generation.</div>
+      </div>
+    </section>
+    <section class="experiences" aria-label="Explore the two press versions">
+      <div class="panel experience">
+        <h2>The original LIFE instrument</h2>
+        <p>The interactive press from commit 9735c49: living cells reshape the oscilloscope wave and its sound in one view.</p>
+        <a class="filebutton" href="life-feedback/">Open original instrument →</a>
+      </div>
+      <div class="panel experience">
+        <h2>A record, a room, a small world</h2>
+        <p>Enter the new print room, or open its listening bench with LIFE already running. Choose PRESS to see the cells and POWER to hear them.</p>
+        <a class="filebutton" href="strain-worlds/">Explore the room →</a>
+        <a class="filebutton" href="strain-worlds/?world=life&amp;station=scope">Hear LIFE in the room →</a>
       </div>
     </section>
     <footer>Source: <a href="https://asd.gsfc.nasa.gov/archive/astrogravs/docs/waveforms/NRmergers/" target="_blank" rel="noopener">NASA GSFC AstroGravS waveform catalog</a>. The first view uses the supplied GSFC_QC6_strain_2_2.dat simulation. The time coordinate is shown as provided, without claiming a physical time in seconds. The disc's rings are an artistic response to the data, not an image of physical spacetime.</footer>
