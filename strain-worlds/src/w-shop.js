@@ -298,6 +298,19 @@ function knock(power){                      /* the whole machine takes it */
   SHV.kick=Math.max(SHV.kick,power);
   SHV.wobP=0;
 }
+/* A physical event on this floor is seen and heard at once, so the shake and
+   the gesture are struck from the same call site: the bench's five gestures are
+   never fired from a timer, only from the machine actually doing something. */
+function knocked(power,gesture,energy){
+  knock(power);
+  if(gesture)hitSound(gesture,energy==null?power:energy);
+}
+/* the lever bottoms out: the platen lands, the mix dips under it, and the
+   sheet exists — the one gesture the shop makes that nothing else can */
+function pullStrike(){
+  knocked(1.5,'platen',1);
+  APP.duckUntil=performance.now()+220;
+}
 function tickKnock(dt){
   SHV.wob*=Math.exp(-7.5*dt);SHV.wobP+=dt*36;
   if(SHV.kick>0){SHV.wob=Math.max(SHV.wob,SHV.kick*2.6);SHV.kick=0;SHV.wobP=0;}
@@ -327,7 +340,7 @@ function shopLayout(){
     ducts:{x:W*0.412,y:-H*0.034,w:W*0.340,h:topH*0.70},
     cyl:{x:W*0.752,y:-H*0.055,w:W*0.248,h:topH*0.92},
     upright:{x:bx+side+W*0.030,y:topH*0.92,w:W*0.088,h:H-botH-topH*0.92},
-    camRack:{x:W*0.947,y:H*0.185,w:W*0.056,h:H*0.545},
+    camRack:{x:W*0.947,y:H*0.185,w:W*0.053-Math.max(8,10*s),h:H*0.545},
     wheelCol:{x:W*0.835,y:H*0.215,w:W*0.080,h:H*0.50},
     tape:{x:W*0.128,y:H-14,w:W*0.115},
     delivery:{x:-W*0.045,y:H*0.625,w:W*0.168,h:H*0.375},
@@ -357,9 +370,10 @@ function shopLayout(){
   }
   /* the drive side: four cams on a shaft, the law wheels beside them */
   G.cams=[];
+  const cr=Math.max(20,Math.min(W*0.040,H*0.060));
   for(let i=0;i<4;i++)
-    G.cams.push({i:i,x:G.camRack.x,y:G.camRack.y+G.camRack.h*(i+0.5)/4,
-      r:Math.max(20,Math.min(W*0.040,H*0.060))});
+    G.cams.push({i:i,x:W-Math.max(10,14*s)-cr*1.30,
+      y:G.camRack.y+G.camRack.h*(i+0.5)/4,r:cr});
   G.wheels=[];
   return G;
 }
@@ -372,7 +386,7 @@ function machineFit(){
   M.duct={x:G.ducts.x,y:H*0.014,w:G.ducts.w,h:Math.max(28,H*0.062)};
   M.cyl={x:W*0.762,y:H*0.020,w:W*0.250,h:Math.max(24,H*0.060)};
   M.cylCap={x:M.cyl.x,y:M.cyl.y+M.cyl.h*0.5,r:M.cyl.h*0.62};
-  M.clamp={x:W*0.780,y:M.cyl.y+M.cyl.h+H*0.004,w:W*0.226,h:Math.max(16,H*0.026)};
+  M.clamp={x:W*0.780,y:M.cyl.y+M.cyl.h+H*0.004,w:W-W*0.780-Math.max(8,10*s),h:Math.max(16,H*0.026)};
   M.imp={x:W*0.752,y:M.cyl.y+M.cyl.h+H*0.052,r:Math.max(16,H*0.030)};
   M.spr={x:G.upright.x+G.upright.w*0.50,y:H*0.355,r:Math.max(12,H*0.022)};
   M.fly={x:W*1.048,y:H*0.848,r:Math.max(40,H*0.118)};
@@ -479,10 +493,6 @@ function buildStatic(){
     b.save();b.strokeStyle=inkedHex(BLACK);b.lineWidth=LW*0.8;
     b.stroke(circP(up.x+up.w*0.5,y,3.4*s));b.restore();
   }
-  b.save();b.translate(up.x+up.w*0.50,up.y+up.h*0.64);b.rotate(-Math.PI/2);
-  cut(b,0,0,'GRAB HERE · SHAKE',{size:M.fs,track:1.2,align:'center',
-      col:inkedHex(TC.paper)});
-  b.restore();
 
   /* The shaft and its control wheels share one casting. Cams stay inboard;
      only the housing, never a label or an operable rim, may crop. */
@@ -863,7 +873,7 @@ function drawHead(g){
   g.save();g.strokeStyle=inkedHex(TC.black);g.lineWidth=LW;g.stroke(nz);g.restore();
   const vp=rrP(S2.x-S2.r*0.30,S2.y-S2.r*0.2+v*S2.r*1.2,S2.r*0.6,S2.r*0.5,2*s);
   face(g,vp,TC.blue,0.40);
-  cut(g,S2.x,S2.y+S2.r*1.6,String(R.sparkBudget|0)+' pops',{size:Math.max(6.5,7.6*s),
+  cut(g,S2.x,S2.y+S2.r*1.6,String(R.sparkBudget|0)+' POPS',{size:Math.max(6.5,7.6*s),
     align:'center',col:inkedHex(TC.paper)});
   if(SHV.sprayPuff>0){
     g.save();g.globalAlpha=Math.min(0.9,SHV.sprayPuff);
@@ -877,11 +887,11 @@ function drawHead(g){
   }
 }
 function shortLab(l){
-  const map={'gap sample space':'FIT','gap neighbour rank':'NEIGHBOUR RANK','coupling':'COUPLING K',
-    'record detune':'DETUNE','energy spread':'SPREAD','record pull':'RECORD PULL','step':'STEP',
-    'terrain gravity':'GRAVITY','topple above (4-card minimum)':'TOPPLE AT','record feed':'RECORD FEED',
-    'loud source columns':'SOURCE COLUMNS','phase steers falls':'PHASE STEERS','feed F':'FEED F',
-    'kill k':'KILL K','diffusion U / V':'DIFFUSION','record modulation':'RECORD MOD.'};
+  const map={'gap sample space':'FIT','gap neighbour rank':'RANK','coupling':'COUPLING',
+    'record detune':'DETUNE','energy spread':'SPREAD','record pull':'PULL','step':'STEP',
+    'terrain gravity':'GRAVITY','topple above (4-card minimum)':'TOPPLE','record feed':'FEED',
+    'loud source columns':'COLUMNS','phase steers falls':'STEERING','feed F':'FEED',
+    'kill k':'KILL','diffusion U / V':'DIFFUSION','record modulation':'MODULATION'};
   return map[l]||l.toUpperCase().slice(0,14);
 }
 function fmt(v){
@@ -957,9 +967,9 @@ function drawWheels(g){
   if(!n)return;
   const step=col.h/n, r=Math.min(Math.max(13,20*s),step*0.40);
   for(let i=0;i<n;i++){
-    const p=ps[i], cx=col.x+col.w*0.45, cy=col.y+step*(i+0.5);
+    const p=ps[i], cx=col.x+col.w*0.71, cy=col.y+step*(i+0.5);
     const labelSize=Math.max(6.5,8.4*s);
-    cut(g,cx,cy-r-Math.max(7,9*s),fit(g,shortLab(p.label),labelSize,col.w-8*s),
+    cut(g,cx,cy-r-Math.max(7,9*s),fit(g,shortLab(p.label),labelSize,Math.max(56,col.w*0.58)),
       {size:labelSize,align:'center',col:inkedHex(TC.paper)});
     if(p.options){
       const on=p.value===p.options[1].value;
@@ -975,7 +985,7 @@ function drawWheels(g){
       continue;
     }
     const t=(p.value-p.min)/(p.max-p.min||1);
-    part(g,circP(cx,cy,r),TC.mid,0.20,{gap:1.6*s,lw:LW});
+    part(g,circP(cx,cy,r),TC.light,0.34,{gap:1.6*s,lw:LW});
     hatch(g,circP(cx,cy,r),cx-r,cy-r,r*2,r*2,60,Math.max(2,2.6*s),
           Math.max(0.6,0.8*s),TC.black,0.42);
     g.save();
@@ -1086,13 +1096,13 @@ function drawThrottle(g){
   const kn=circP(x,T.y-H,Math.max(9,11.5*s));
   face(g,kn,TC.red,0.40);shadow(g,kn,0.30,45);
   g.save();g.strokeStyle=inkedHex(TC.black);g.lineWidth=LW;g.stroke(kn);g.restore();
-  const tagX=T.x-8*s, tagY=T.y-H-34*s, tagW=T.travel+16*s;
+  const tagW=T.travel+16*s, tagX=x-tagW/2, tagY=T.y-H-34*s;
   const tag=rrP(tagX,tagY,tagW,22*s,1.5*s);
   face(g,tag,TC.paper,0.08);
-  line(g,x,tagY+22*s,x,T.y-H-10*s,TC.paper,LW,1);
+  line(g,x,tagY+22*s,x,T.y-H-Math.max(9,11.5*s),TC.paper,LW,1);
   cut(g,tagX+tagW/2,tagY+9*s,'PRESS SPEED',{size:Math.max(6.5,7.2*s),
     align:'center',col:inkedHex(TC.black)});
-  cut(g,tagX+tagW/2,tagY+18*s,Math.round(v)+' gen/s',{size:Math.max(7,8*s),
+  cut(g,tagX+tagW/2,tagY+18*s,Math.round(v)+' GEN/s',{size:Math.max(7,8*s),
     align:'center',bold:true,col:inkedHex(TC.black)});
   if(SHV.thrHi){
     g.save();g.strokeStyle=inkedHex(TC.paper);g.lineWidth=LW*1.5;
@@ -1193,8 +1203,8 @@ function leverTag(){
    dialog. The picker behind the file input is opened by a physical hotspot on
    the board, and the input itself is never seen. */
 function stockList(){
-  const out=[{id:'gsfc',label:'GSFC QC6 STRAIN',kind:'house'},
-             {id:'noise',label:'SEEDED NOISE',kind:'house'}];
+  const out=[{id:'gsfc',label:'GSFC STRAIN',kind:'house'},
+             {id:'noise',label:'HOUSE NOISE',kind:'house'}];
   const f=(typeof APP!=='undefined')?APP.file:null;
   if(f)out.push({id:'file',label:(f.name||'DROPPED FILE').toUpperCase().slice(0,22),kind:f.kind,
                  file:f,thumb:SHV.thumb});
@@ -1312,11 +1322,8 @@ function drawDelivery(g){
     /* The delivery bay is a dark casting, so this line is KNOCKED OUT of it —
        pale ink on the dark, never dark ink on dark, which is what made it
        unreadable. */
-    const lines=wrap(g,'nothing pulled yet — make the press ready, then haul the lever',
-      Math.max(6.5,7.4*s),vw*0.9);
-    for(let i=0;i<lines.length;i++)
-      cut(g,vcx,D.y+D.h*0.42+i*Math.max(9,10.5*s),lines[i],
-        {size:Math.max(6.5,7.4*s),align:'center',col:inkedHex(TC.wash)});
+    cut(g,vcx,D.y+D.h*0.42,'NOTHING PULLED YET · HAUL THE LEVER',
+      {size:Math.max(6.5,7.4*s),align:'center',col:inkedHex(TC.wash)});
   }
   const k=pile.length;
   cut(g,vcx,D.y-4*s,k?(k+(k===1?' SHEET':' SHEETS')):'',{size:Math.max(6.5,7.6*s),
@@ -1404,7 +1411,7 @@ function drawPaperwork(g){
   miniRecord(g,pc.x+4,pc.y+4,pc.w-8,72*s,rec);
   const capS=Math.max(6.4,7.2*s), capW=pc.w-12;
   cut(g,pc.x+6,pc.y+72*s+Math.max(12,14*s),
-    fit(g,'COMMISSION — '+((rec&&rec.name)?rec.name.toUpperCase():'—'),capS,capW),
+    fit(g,'COMMISSION · '+((rec&&rec.name)?rec.name.toUpperCase():'—'),capS,capW),
     {size:capS,col:inkedHex(TC.black)});
   /* the plate proof: what the field will print */
   const fy=pc.y+72*s+Math.max(24,28*s);
@@ -1416,7 +1423,7 @@ function drawPaperwork(g){
   g.restore();
   g.save();g.strokeStyle=inkedHex(TC.deep);g.lineWidth=Math.max(0.8,1*s);g.stroke(box);g.restore();
   cut(g,pc.x+6,fy+72*s+Math.max(12,14*s),
-    fit(g,'PLATE PROOF — '+(((typeof APP!=='undefined')&&APP.field)?APP.field.label:'—'),capS,capW),
+    fit(g,'PLATE PROOF · '+(((typeof APP!=='undefined')&&APP.field)?APP.field.label:'—'),capS,capW),
     {size:capS,col:inkedHex(TC.black)});
   /* the job ticket: the whole state of the shop as one document you can read */
   const ty=fy+72*s+Math.max(24,28*s);
@@ -1425,27 +1432,23 @@ function drawPaperwork(g){
   g.save();g.strokeStyle=inkedHex(TC.black);g.lineWidth=LW;g.stroke(tk);g.restore();
   const A=(typeof APP!=='undefined')?APP:null,SH=(typeof SHOP!=='undefined')?SHOP:null;
   const st=SH?SH.state:'makeready';
-  const stateW={makeready:'MAKING READY',proof:'PROOF ON THE TABLE',run:'EDITION RUNNING',
+  const stateW={makeready:'MAKEREADY',proof:'PROOF PULLED',run:'EDITION RUNNING',
                 done:'DELIVERED'}[st]||'—';
   const rows=[
-    ['JOB','№ '+String(SH?SH.job:1).padStart(3,'0')],
     ['COMMISSION',(A&&A.rec&&A.rec.name)?A.rec.name:'—'],
     ['PLATE',(A&&A.field)?A.field.label:'—'],
     ['LAW',(A&&A.world)?A.world.label:'—'],
-    ['IMPRESSION',Mimp()+'×'+Mimp()+' CARDS'],
     ['EDITION',st==='run'||st==='done'
       ?(SH?Math.min(SH.n-1,SH.N):0)+' OF '+(SH?SH.N:8)+' OUT'
       :(SH?SH.N:8)+' SHEETS ORDERED'],
-    ['INK KEYS',[0,1,2].map(i=>Math.round((SHV.key[i]||0)*100)).join('/')],
-    ['REGISTER',regErr()<0.30?'DEAD ON':regErr().toFixed(2)+' PX OUT'],
     ['STATE',stateW]
   ];
   let ry=ty+Math.max(13,15.5*s);
-  cut(g,pc.x+8,ry,'JOB TICKET',{size:Math.max(7,8.2*s),track:2.0,bold:true,col:inkedHex(TC.black)});
-  cut(g,pc.x+pc.w-10,ry,rows[0][1],{size:Math.max(8,9.6*s),align:'right',bold:true,col:inkedHex(TC.black)});
+  cut(g,pc.x+8,ry,'JOB TICKET · № '+String(SH?SH.job:1).padStart(3,'0'),
+    {size:Math.max(7,8.2*s),track:2.0,bold:true,col:inkedHex(TC.black)});
   line(g,pc.x+8,ry+3*s,pc.x+pc.w-10,ry+3*s,TC.black,Math.max(0.9,1.1*s),0.9);
   ry+=Math.max(11,13*s);
-  for(let i=1;i<rows.length;i++){
+  for(let i=0;i<rows.length;i++){
     /* label left, value right, and the value gets whatever the label leaves.
        A long commission name is shortened by the compositor rather than
        reversing into the label, which is what produced "COMMGSFC_QC6…". */
@@ -1457,12 +1460,6 @@ function drawPaperwork(g){
     line(g,lx,ry+2.4*s,rx,ry+2.4*s,TC.pale,1,0.9);
     ry+=Math.max(11,13*s);
   }
-  /* the law's measured note, wrapped into the ticket's foot: this is the one
-     place the numbers live, and it is paper */
-  const note=(A&&A.world)?((WORLD_NOTE||{})[A.world.id]||A.world.blurb||''):'';
-  ry+=Math.max(3,4*s);
-  line(g,pc.x+8,ry-2*s,pc.x+pc.w-10,ry-2*s,TC.black,Math.max(0.9,1.1*s),0.9);
-  para(g,note.slice(0,300),pc.x+8,ry+size,size*0.94,pc.w-20,size*1.28,{col:inkedHex(TC.deep)});
   /* the drawer: the full paperwork, pulled out when you want it */
   const drY=ty+Math.max(150,186*s)+Math.max(6,8*s);
   const tab=rrP(pc.x+2,drY,pc.w-4,Math.max(20,24*s),2*s);
@@ -1491,7 +1488,7 @@ function drawPaperwork(g){
   }
   g.restore();
   g.save();g.strokeStyle=inkedHex(TC.deep);g.lineWidth=Math.max(0.8,1*s);g.stroke(pb);g.restore();
-  cut(g,pc.x+8,py+Math.max(11,13.5*s),'THE BOARD, LIVE',
+  cut(g,pc.x+8,py+Math.max(11,13.5*s),'THE BOARD · LIVE',
     {size:Math.max(6.2,7*s),col:inkedHex(TC.black)});
 }
 /* ── §19 · the counter window: the machine's own instrumentation ─────────── */
@@ -1549,7 +1546,7 @@ function drawLoupe(g){
   cut(g,cx,cy+side/2+Math.max(14,17*s),line,{size:Math.max(7.4,9*s),align:'center',
     bold:true,col:inkedHex(TC.black)});
   cut(g,cx,cy+side/2+Math.max(24,29*s),
-    'PULL '+p.seed+' · GEN '+p.gen+' · REG '+p.reg.toFixed(2)+' PX  ·  CLICK TO PUT IT BACK',
+    'PULL '+p.seed+' · GEN '+p.gen+' · REG '+p.reg.toFixed(2)+' PX · CLICK TO RETURN',
     {size:Math.max(6.4,7.4*s),align:'center',col:inkedHex(TC.mid)});
   g.save();g.strokeStyle=inkedHex(TC.mid);g.lineWidth=LW;
   g.strokeRect(cx-side/2-6,cy-side/2-6,side+12,side+12);g.restore();
@@ -1588,9 +1585,9 @@ function drawDrawer(g){
       (rec.amax!=null?', |h| up to '+rec.amax.toFixed(3):'')):'—');
   block('HOW IT BECAME A RECORD',(A&&A.wmeta)?waveTxt(A.wmeta):'');
   block('THE PLATE ON THE CYLINDER',
-    (A&&A.field?(((A.field.label)+' — '+(A.field.note||'')+' '+(A.field.blurb||''))):''));
+    (A&&A.field?(((A.field.label)+' — '+(A.field.blurb||''))):''));
   if(A&&A.world)block('THE LAW WORKING THE INK',
-    A.world.label+' — '+(A.world.blurb||'')+' '+((WORLD_NOTE||{})[A.world.id]||''));
+    A.world.label+' — '+(A.world.blurb||''));
   g.restore();
 }
 function waveTxt(m){
@@ -1648,7 +1645,7 @@ function drawWallPlates(g){
   const foot=ps.length?ps[0].y+ps[0].h+Math.max(12,15*s):G.wall.h*0.62;
   const isz=Math.max(6.8,7.8*s);
   cut(g,G.wall.x+8*s,foot,
-    fit(g,'SPARE PLATES  ·  BACK WALL  —  REACH UP AND SWAP ONE',isz,G.wall.w-16*s),
+    fit(g,'SPARE PLATES · REACH UP',isz,G.wall.w-16*s),
     {size:isz,track:1.1,bold:true,col:inkedHex(TC.black)});
 }
 /* ── §23 · what is in the hand ──────────────────────────────────────────────
@@ -1787,9 +1784,9 @@ function shopDown(x,y){
   else if(hit.kind==='key'){st.i=hit.i;st.v0=T.key[hit.i];
     st.sy=M.duct.y+M.duct.h-3*s0();st.travel=Math.max(20,26*s0());}
   else if(hit.kind==='cam'){st.i=hit.i;st.x0v=(camState()[hit.i].x===undefined?1:camState()[hit.i].x);}
-  else if(hit.kind==='wheel'){st.i=hit.i;st.v0=wheelVal(hit.i);
+  else if(hit.kind==='wheel'){st.i=hit.i;st.v0=wheelVal(hit.i);st.tick=NaN;
     st.span=Math.max(46,G.wheelCol.h*0.30);}
-  else if(hit.kind==='head'){st.i=hit.i;st.v0=headVal(hit.i);st.span=Math.max(40,60*G.s);}
+  else if(hit.kind==='head'){st.i=hit.i;st.v0=headVal(hit.i);st.tick=NaN;st.span=Math.max(40,60*G.s);}
   else if(hit.kind==='lev'){st.v0=T.lev||0;killSp(T);}
   else if(hit.kind==='sheet'){st.h=hit.h;}
   else if(hit.kind==='stock'){const o=hit.obj;killSp(o);
@@ -1808,7 +1805,8 @@ function shopDown(x,y){
     T.grabIt=hit.it;T.grabIt._hit=hit.it;}
   else if(hit.kind==='plate'){st.p=hit.p;
     T.grab={carry:true,kind:'plate',x:x,y:y,w:hit.p.w*1.15,h:hit.p.h*1.15,
-      label:hit.p.label,grip:'CLAMP IT ON THE CYLINDER'};T.drag=null;T.grabIt=hit.p;}
+      label:hit.p.label,grip:'CLAMP IT ON THE CYLINDER'};T.drag=null;T.grabIt=hit.p;
+    hitSound('snap',0.2);}
   else if(hit.kind==='frame'||hit.kind==='none'||hit.kind==='grip'){
     T.drag=null;
     T.shake={x:x,y:y,dir:0,rev:0,travel:0};
@@ -1845,6 +1843,12 @@ function shopMove(x,y){
   }
   d.x=x;d.y=y;d.moved=Math.max(d.moved,Math.hypot(x-d.x0,y-d.y0));
   const dx=x-d.x0, dy=y-d.y0;
+  /* a knurled dial is a detent, not a slide: it clicks once per step of travel,
+     and the tappet wheels and the head dials click from this one place */
+  const dialTick=(k,v,lo,hi)=>{
+    const tick=Math.round((v-lo)/(hi-lo||1)*24);
+    if(tick!==k.tick){k.tick=tick;hitSound('snap',0.12);}
+  };
   switch(d.kind){
     case 'pin':{
       const p=d.p, hx=p.hx, hy=p.hy;
@@ -1854,10 +1858,10 @@ function shopMove(x,y){
       if(Math.hypot(nx,ny)<p.rad*0.11){nx=0;ny=0;}
       p.x=hx+nx;p.y=hy+ny;
       if(nx===0&&ny===0&&!p.wasHome){
-        p.wasHome=1;p.flash=1;knock(0.25);
+        p.wasHome=1;p.flash=1;knocked(0.25,'snap');
         say(p.name+' PLATE IN REGISTER',TC.teal);
         if(SHV.pins.every(q=>pinResidual(q)<0.02))
-          say('ALL THREE PLATES HOME · THE SHEET IS DEAD ON',TC.teal);
+          say('THREE PINS HOME · DEAD ON',TC.teal);
       }else if(nx!==0||ny!==0)p.wasHome=0;
       break;
     }
@@ -1881,6 +1885,7 @@ function shopMove(x,y){
       let v=d.v0-dy/d.span*(p.max-p.min);
       if(p.step){v=Math.round(v/p.step)*p.step;}
       v=clamp(v,p.min,p.max);
+      dialTick(d,v,p.min,p.max);
       API.setWorldParam(p.key,v);
       break;
     }
@@ -1895,6 +1900,7 @@ function shopMove(x,y){
       }
       let v=d.v0-dy/d.span*(p.max-p.min);
       if(p.step){v=Math.round(v/p.step)*p.step;}
+      dialTick(d,v,p.min,p.max);
       API.setFieldParam(p.key,clamp(v,p.min,p.max));
       break;
     }
@@ -1964,12 +1970,12 @@ function shopUp(x,y){
       if(inGrip){
         if(it.id==='file'&&it.file)API.loadStock(it.file);
         else API.setSource(it.id);
-        knock(0.35);say('STOCK INTO THE GRIPPERS · '+it.label,TC.teal);
+        knock(0.35);hitSound('sheet',0.5);say('STOCK INTO THE GRIPPERS · '+it.label,TC.teal);
       }
     }else if(T.grab.kind==='stock'){
       if(inGrip){
         if(obj.file)API.loadStock(obj.file);
-        knock(0.35);
+        knocked(0.35,'sheet',0.45);
         const k=SHV.stock.indexOf(obj);if(k>=0)SHV.stock.splice(k,1);
       }else{
         sp(obj,'x',obj.slotX,70,22);sp(obj,'y',obj.slotY,70,22);
@@ -1978,7 +1984,7 @@ function shopUp(x,y){
       const G=SHV.G,M=SHV.M,p=it;
       const onCyl=y<G.H*0.235&&x>G.W*0.52;
       if(onCyl){
-        knock(0.55);
+        knocked(0.55,'ink');
         API.setField(p.id);
         say('PLATE CLAMPED · '+p.label,TC.teal);
       }
@@ -2003,6 +2009,7 @@ function shopUp(x,y){
       if(c.x>0.5){
         const list=API.worlds(), w=list[d.i];
         if(w&&w.id!==APP.wrldId){
+          knocked(0.35,'snap');
           say('CAM ON THE SHAFT · '+w.label,TC.black);
           API.setWorld(w.id);
         }
@@ -2013,7 +2020,7 @@ function shopUp(x,y){
       const t=T.lev||0;
       if(t>0.62){
         T.lev=1;
-        knock(1.5);
+        pullStrike();
         API.pull();
         SHV.fireAt=performance.now()+140;
       }else{
@@ -2042,7 +2049,7 @@ function shopUp(x,y){
       const inside=x>SHV.G.delivery.x-60&&x<SHV.G.delivery.x+SHV.G.delivery.w+90&&
                    y>SHV.G.delivery.y-70&&y<SHV.G.H+20;
       if(quick)T.loupe=h.p;
-      else if(!inside){API.discard(h.i);say('SHEET BINNED',TC.pink);}
+      else if(!inside){API.discard(h.i);hitSound('sheet',0.3);say('SHEET BINNED',TC.pink);}
       break;
     }
     case 'buy':{
@@ -2101,6 +2108,7 @@ function shopTick(dt){
   T.pileT=Math.max(0,(T.pileT||0)-dt*2.2);
 }
 function say(txt,tone){
+  hitSound('tape',0.5);
   SHV.tape.push({txt:String(txt),t:SHV.t||0,tone:tone});
   while(SHV.tape.length>5)SHV.tape.shift();
 }
@@ -2298,7 +2306,7 @@ const SHOPVIEW={
       if(e.key==='Escape'){SHV.loupe=null;sp(SHV,'paper',0,120,20);}
       else if(e.code==='Space'&&e.target===document.body){
         e.preventDefault();
-        if(SHV.lev<0.62){SHV.lev=1;knock(1.5);API.pull();SHV.fireAt=performance.now()+140;}
+        if(SHV.lev<0.62){SHV.lev=1;pullStrike();API.pull();SHV.fireAt=performance.now()+140;}
       }
     });
     /* a phone is shaken, not grabbed: the same power mapping, the same rules */
@@ -2309,7 +2317,7 @@ const SHOPVIEW={
       if(!A.mean)A.mean=m;
       A.mean=A.mean*0.92+m*0.08;
       const dev=Math.abs(m-A.mean),now=performance.now();
-      if(dev>4.5&&now-A.last>700){A.last=now;knock(0.7);API.shake(clamp((dev-4.5)/12,0.15,1));}
+      if(dev>4.5&&now-A.last>700){A.last=now;knocked(0.7,'platen',clamp((dev-4.5)/12,0.15,1));API.shake(clamp((dev-4.5)/12,0.15,1));}
     });
     window.addEventListener('dragstart',e=>e.preventDefault());
     window.addEventListener('dragover',e=>{
@@ -2324,8 +2332,8 @@ const SHOPVIEW={
       const raw=at(e),[x,y]=onPress(raw[0],raw[1]);
       SHOPVIEW.dropFiles(e.dataTransfer.files,x,y);
     });
-    say('JOB 001 ON THE COUNTER · THE PLATES ARE OFF REGISTER — BRING THE PINS HOME',TC.pink);
-    say('DROP ANY FILE ANYWHERE: IT LANDS ON THE FEED BOARD AS STOCK',TC.black);
+    say('JOB 001 · BRING THE THREE PINS HOME',TC.pink);
+    say('DROP A FILE ON THE FEED BOARD',TC.black);
   },
   /* the app asks for the pitch of the three plates before it prints */
   slip(){return slipArr();},
@@ -2354,7 +2362,7 @@ const SHOPVIEW={
       if(/^image\//.test(f.type))createImageBitmap(f).then(b=>{SHV.thumb=b;}).catch(()=>{});
     }
   },
-  deliver(kind){SHV.pileT=1;},
+  deliver(kind){SHV.pileT=1;if(kind!=='void')hitSound('delivery',0.7);},
   openPicker(){openPicker();},
   pick(x,y){return shopPick(x,y).kind;},
   lens:function(){return SHV.lens;},

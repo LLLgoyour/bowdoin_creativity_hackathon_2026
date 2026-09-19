@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   w-stock.js — BRING A FILE. The source desk, and nothing else.
+   w-stock.js — THE LIGHT TABLE. The source desk, and nothing else.
 
    The press owns registration, the proof and the edition; the ink library owns
    coverage and mixing; the listening bench owns sound. This desk owns exactly
@@ -54,7 +54,7 @@ const STOCK_STATION=(()=>{
   const clampVal=v=>v>1?1:(v<-1?-1:v);
 
   function srcLabel(srcId,file){
-    if(srcId==='gsfc')return 'GSFC STRAIN RECORD';
+    if(srcId==='gsfc')return 'GSFC STRAIN';
     if(srcId==='noise')return 'HOUSE NOISE';
     if(srcId==='file')return file?('A FILE · '+String(file.kind||'').toUpperCase()):'A FILE';
     return String(srcId||'—').toUpperCase();
@@ -142,9 +142,8 @@ const STOCK_STATION=(()=>{
     TL.disc(g,492,39,4,C.paper);TL.disc(g,542,37,4,C.paper);
     TL.line(g,[[518,24],[520,44]],C.blue,1.2);
     /* what this desk is, and the one thing it is not */
-    TL.text(g,'BRING A FILE',92,76,18,C.blue);
-    TL.text(g,'SOURCE INTAKE · THE LIGHT TABLE · STOCK ONLY — NOT PINS, INK OR SOUND',94,94,10,C.coral);
-    TL.text(g,'WHAT COMES IN HERE IS THE COMMISSION; EVERY FIELD AND EVERY WORLD IS CUT FROM IT.',94,109,9,C.blue);
+    TL.text(g,'THE LIGHT TABLE',92,76,18,C.blue);
+    TL.text(g,'SOURCE · WHAT COMES IN IS THE COMMISSION',94,94,10,C.coral);
 
     /* ── the light table: the whole record, still ─────────────────────────── */
     const glass=[[46,120],[648,116],[644,508],[42,514]];
@@ -155,7 +154,7 @@ const STOCK_STATION=(()=>{
     const wx0=64,wx1=632;
     TL.text(g,'01  Re(h)',wx0,141,11,C.blue);
     TL.text(g,'02  Im(h)',300,141,11,C.coral);
-    TL.text(g,'THE WHOLE RECORD · ONE STILL PICTURE',wx1,141,9,C.blue,'right');
+    TL.text(g,'THE WHOLE RECORD',wx1,141,9,C.blue,'right');
 
     const tracks=[['re','Re',C.blue,190],['im','Im',C.coral,286]];
     const half=46;
@@ -213,27 +212,23 @@ const STOCK_STATION=(()=>{
           ' px · WORST '+fmt(m.max)+' px');
         band.push('CONTOUR  '+m.points+' SAMPLES · '+m.loops+' LOOP'+(m.loops===1?'':'S')+
           ' · '+m.crossings+' CROSSINGS');
-        band.push('FRAME  '+m.source+' IN → '+m.frame+' ANALYSED · OTSU '+fmt(m.level)+
-          ' ON THE '+(m.invert?'LIGHT':'DARK')+' SIDE');
-        band.push('SILHOUETTE IoU '+fmt(m.iou)+' · THE PICTURE BECAME THE WAVE, IT WAS NOT FILED BESIDE IT');
+        band.push('FRAME  '+m.source+' → '+m.frame+' · OTSU '+fmt(m.level));
+        band.push('SILHOUETTE IoU '+fmt(m.iou));
       }else if(m.kind==='audio'){
         band.push('SOURCE  '+m.source+' SAMPLES AT '+m.sr+' Hz');
         band.push('BOX-AVERAGED ×'+m.factor+' ONTO '+m.points+' SAMPLES AT '+fmt(m.rate)+' SAMPLES/s');
-        band.push('TIME IS SECONDS · FREQUENCY IS Hz · Re/Im IS x + i·H(x)');
-        band.push('A SOUND IS A RECORD HERE, NOT A PLAYBACK');
       }else{
         band.push('NUMERIC FILE  '+m.points+' POINTS IN '+m.columns+' COLUMN'+(m.columns===1?'':'S'));
-        band.push('COLUMN 1 IS t WHEN THERE ARE THREE COLUMNS, ELSE THE ROW INDEX');
-        band.push('THE COLUMNS BECOME Re AND Im EXACTLY AS WRITTEN · NOTHING IS SMOOTHED');
+        band.push('Re AND Im AS WRITTEN · NOTHING SMOOTHED');
       }
-      TL.text(g,'MEASURED FROM THE FILE THAT CAME IN',64,392,9,C.coral);
+      TL.text(g,'MEASURED FROM THE FILE',64,392,9,C.coral);
     }else{
-      TL.text(g,'MEASURED FROM THE RECORD ON THE GLASS',64,392,9,C.coral);
+      TL.text(g,'MEASURED ON THE GLASS',64,392,9,C.coral);
       if(hasRec){
         band.push('PHASE SPAN  '+fmt(turns)+' TURNS OF ACCUMULATED PHASE');
         band.push('Re ['+fmt(reLo)+', '+fmt(reHi)+']   Im ['+fmt(imLo)+', '+fmt(imHi)+']');
-        band.push('THE HEAVIEST SAMPLE IS '+pkAt+' OF '+(n-1)+' — SHOWN, NOT AVERAGED AWAY');
-        band.push('SET BY '+srcLabel(srcId,file)+' · THIS ONE RECORD FEEDS EVERY FIELD AND EVERY WORLD');
+        band.push('HEAVIEST SAMPLE '+pkAt+' OF '+(n-1));
+        band.push('SET BY '+srcLabel(srcId,file));
       }
     }
     band.slice(0,4).forEach((t,k)=>TL.text(g,t,64,414+k*22,9,C.blue));
@@ -258,9 +253,9 @@ const STOCK_STATION=(()=>{
     /* ── the rack: three sheets always, a fourth once a file has landed ───── */
     const rx=668,rw=326;
     TL.text(g,'CHOOSE THE SHEET',rx,140,13,C.blue);
-    TL.text(g,'CLICK ONE — IT BECOMES THE COMMISSION, NOT A SETTING',rx,156,9,C.coral);
+    TL.text(g,'CLICK ONE · IT BECOMES THE COMMISSION',rx,156,9,C.coral);
     const sheets=[];
-    sheets.push({id:'source:gsfc',label:'GSFC STRAIN RECORD',n:'1',
+    sheets.push({id:'source:gsfc',label:'GSFC STRAIN',n:'1',
       sub:'INCLUDED · '+((typeof GSFC!=='undefined'&&GSFC.n)?GSFC.n:773)+' SAMPLES',on:srcId==='gsfc'});
     sheets.push({id:'source:noise',label:'HOUSE NOISE',n:'2',
       sub:'RE-CUT AT SEED '+(A?A.seed:'—'),on:srcId==='noise'});
@@ -268,7 +263,7 @@ const STOCK_STATION=(()=>{
       sub:String(file.kind||'').toUpperCase()+(file.size?(' '+file.size):'')+' · '+file.name,
       on:srcId==='file'});
     sheets.push({id:'source:open',label:'OPEN A REAL FILE',n:hasFile?'4':'3',
-      sub:'IMAGE · SOUND · COLUMNS OF NUMBERS',on:false});
+      sub:'IMAGE · SOUND · NUMBERS',on:false});
     let fy=166;
     for(const sh of sheets){acts.push(folder(g,TL,C,rx,fy,rw,64,sh));fy+=78;}
 
@@ -280,11 +275,10 @@ const STOCK_STATION=(()=>{
       TL.disc(g,672,482,2.6,C.paper);TL.disc(g,750,590,2.6,C.paper);
       TL.knob(g,'harmonics','HARMONICS P',710,537,27,(partials-1)/1022,'P '+partials,knobs);
       TL.text(g,'PARTIALS OF THE DFT FIT',786,516,10,C.blue);
-      TL.text(g,'MAX 1023 · P 1 IS A CIRCLE',786,534,9,C.blue);
-      TL.text(g,'RE-CUTS THE WAVE, NOT THE PICTURE',786,552,9,C.blue);
-      TL.text(g,'FITTED ON THE CACHED CONTOUR',786,570,9,C.blue);
-      TL.text(g,'NEW STOCK NEEDS A NEW PROOF.',rx,628,9,C.blue);
-      TL.text(g,'SHEETS ALREADY DELIVERED STAY DELIVERED.',rx,644,9,C.blue);
+      TL.text(g,'MAX 1023',786,534,9,C.blue);
+      TL.text(g,'RE-CUTS THE WAVE',786,552,9,C.blue);
+      TL.text(g,'NEW STOCK VOIDS THE PROOF.',rx,628,9,C.blue);
+      TL.text(g,'DELIVERED SHEETS STAY.',rx,644,9,C.blue);
     }else{
       /* a torn slip pinned to the rack, so the rule is on the desk and not in a
          dialog: stock IS the commission, and the edition is never rewound */
@@ -293,10 +287,8 @@ const STOCK_STATION=(()=>{
         [rx+rw-4,512],[rx+rw-4,626],[rx+4,626]],C.paper);
       TL.line(g,[[rx+6,556],[rx+rw-8,556]],C.blue,.5);
       TL.disc(g,rx+rw-30,506,4.4,C.coral);
-      TL.text(g,'BEFORE YOU CHANGE THE STOCK',rx+20,542,9,C.coral);
-      TL.text(g,'NEW STOCK NEEDS A NEW PROOF.',rx+20,576,10,C.blue);
-      TL.text(g,'SHEETS ALREADY DELIVERED',rx+20,596,10,C.blue);
-      TL.text(g,'STAY DELIVERED.',rx+20,614,10,C.blue);
+      TL.text(g,'NEW STOCK VOIDS THE PROOF.',rx+20,576,10,C.blue);
+      TL.text(g,'DELIVERED SHEETS STAY.',rx+20,596,10,C.blue);
     }
 
     g.restore();
