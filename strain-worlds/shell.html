@@ -21,9 +21,17 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--paper);
    record directly; the press leaves a physical file on its feed board. */
 #f_any{position:fixed;left:-4px;top:-4px;width:1px;height:1px;opacity:0;border:0;
   padding:0;margin:0;pointer-events:none}
+#life-home-link{position:fixed;right:18px;bottom:12px;z-index:9;
+  padding:7px 11px;border:1.5px solid var(--ink);border-radius:2px;
+  background:var(--paper);color:var(--ink);text-decoration:none;
+  font:700 11px ui-monospace,Menlo,monospace;letter-spacing:.03em;
+  box-shadow:3px 3px 0 #1f6fc6;touch-action:manipulation}
+#life-home-link:hover,#life-home-link:focus-visible{background:#ffd21e}
+@media(max-width:600px){#life-home-link{right:10px;bottom:8px;font-size:10px}}
 </style></head><body>
 <canvas id="stage"></canvas>
 <input id="f_any" type="file" aria-hidden="true" tabindex="-1">
+<a id="life-home-link" href="../">← LIFE FEEDBACK</a>
 <!-- classic scripts, in load order: works straight off file:// -->
 <script src="src/core.js"></script>
 <script src="src/w-field.js"></script>

@@ -49,6 +49,9 @@ The pre-room LIFE instrument from merge `9735c49` is preserved unchanged as
 `../site/strain-worlds/index.html`, generated from this directory's source.
 Its `?world=life&station=scope` link starts on the listening bench with LIFE
 running on the recurrence field, so the live cell feedback is visible at once.
+The site homepage (`../site/index.html`) is a copy of the pre-room instrument
+with LIFE and the recurrence field selected by default, plus a link to the room.
+The room's bottom link returns to that homepage, including from local builds.
 
 ## The room
 
