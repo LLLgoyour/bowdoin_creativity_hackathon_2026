@@ -44,6 +44,12 @@ are observations from those runs, not frame-rate guarantees.
     node build.mjs builds/strain-worlds.html   # inlines src/ + data into one file
     node tools/embed.mjs                       # regenerates src/data-gsfc.js from the .dat
 
+The pre-room LIFE instrument from merge `9735c49` is preserved unchanged as
+`../site/life-feedback/index.html`. The current room is published separately at
+`../site/strain-worlds/index.html`, generated from this directory's source.
+Its `?world=life&station=scope` link starts on the listening bench with LIFE
+running on the recurrence field, so the live cell feedback is visible at once.
+
 ## The room
 
 The page opens in the workshop: an isometric print room drawn in the press's own

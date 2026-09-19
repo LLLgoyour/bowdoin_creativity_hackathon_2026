@@ -599,8 +599,16 @@ function autoM(){
       throw new Error('w-shop.js did not load — no machine to stand at');
     SHOPVIEW.init();
     M=autoM();Muser=false;setM(M);
+    /* Showcase links can start at the LIFE listening bench while the usual
+       entrance still opens the room with its default world. */
+    const entrance=new URLSearchParams(window.location.search);
+    if(entrance.get('world')==='life'){
+      APP.wrldId='life';
+      APP.fldId='matrix'; // recurrence bands keep LIFE active through the warm-up
+    }
     if(typeof prepRecord==='function'&&typeof GSFC!=='undefined')setSource('gsfc');
     else throw new Error('no record module: GSFC missing');
+    if(entrance.get('station')==='scope')ROOMVIEW.enter('scope');
     shopSay('JOB 001 ON THE COUNTER — the plates are off register: bring the three pins home');
     /* Source intake loads directly; files placed on the press feed board remain
        physical stock until they are fed into the gripper. */
