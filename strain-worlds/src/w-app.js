@@ -592,6 +592,10 @@ function autoM(){
 /* ── boot ────────────────────────────────────────────────────────────────── */
 (function boot(){
   try{
+    const homeLink=document.getElementById('life-home-link');
+    if(homeLink&&window.location.protocol==='file:')
+      homeLink.href=window.location.pathname.endsWith('/shell.html')
+        ?'../site/index.html':'../../site/index.html';
     /* the worlds have finished pushing the colours they invent, so the press
        can align the whole palette to what it can actually print */
     snapPalette();
