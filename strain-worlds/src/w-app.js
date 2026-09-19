@@ -15,6 +15,7 @@ const APP = {
      path/matrix/spectro/hst) while life on path, whose 79%-dense mask is
      dominated by its boundary at that size, dies out within a few generations. */
   srcId:'gsfc', fldId:'path', wrldId:'synch', seed:20260919,
+  duckUntil:0,
   par:{field:{}, worlds:{}}
 };
 let M=52, Muser=false, speed=10, playing=true, gen=0, liveN=0,
@@ -27,8 +28,8 @@ const safe=(fn,d)=>{try{return fn();}catch(e){return d;}};
 function fail(e){
   lastErr=String((e&&e.message)||e);
   if(typeof SHOPVIEW!=='undefined'&&SHOPVIEW.say)
-    SHOPVIEW.say('THE PRESS STOPPED — '+lastErr,TC.pink);
-  if(typeof ROOMVIEW!=='undefined')ROOMVIEW.say('COULD NOT COMPLETE — '+lastErr);
+    SHOPVIEW.say('THE PRESS STOPPED · '+lastErr,TC.pink);
+  if(typeof ROOMVIEW!=='undefined')ROOMVIEW.say('COULD NOT COMPLETE · '+lastErr);
 }
 window.addEventListener('error',e=>fail(e));
 
@@ -200,95 +201,136 @@ function recordScopePoint(){
   const value=APP.wrldId==='synch'&&APP.S?APP.S.order:liveN/Math.max(1,M*M);
   APP.scopeHist[APP.scopeN%APP.scopeHist.length]=clamp(value,0,1);APP.scopeN++;
 }
-/* Upstream sonification, operated by the listening bench. Both instruments
-   follow one sample cursor. Display gain/offset never change the record. */
-const AUDIO={ctx:null,enabled:false,mode:'tone',volume:.65,lastIndex:-1,
-  lastMode:'',lastVolume:-1,reading:{}};
+/* The press's own instrument, operated by the listening bench. The mapping that
+   feeds it stays pure (src/w-sonify.js + src/w-phrase.js) so the printed claim
+   about what each number does is still literally true of the code below it: the
+   instrument is only how those three voices are sounded. The ink dials on the
+   wall are its mix, and the room it plays in is the shop's own reverb. */
+const AUDIO={ctx:null,synth:null,theme:null,themeOn:false,enabled:false,mode:'tone',
+  volume:.65,space:.38,character:.5,
+  lastIndex:-1,lastMode:'',lastVolume:-1,lastSpace:-1,lastCharacter:-1,lastApply:0,
+  lastBar:-1,lastLead:-1,reading:{},state:{rec:null,ph:null,live:0,mag:0,phase:0,stride:1,speed:10}};
+/* the machine's own gestures. Struck from the press's real events, never from a
+   timer: the platen lands when the lever bottoms out, the pin snaps when the
+   plate comes home, and nothing sounds at all while the sound is off. */
+function hitSound(name,energy){
+  if(AUDIO.enabled&&AUDIO.synth)AUDIO.synth.hit(name,energy);
+}
+/* one tick per ink dial step, written in one place: the press's duct keys and
+   the ink library's dials both route through setInkKey, so they sound alike */
+const INK_TICK=[NaN,NaN,NaN];
 function stopAudio(){
-  const ctx=AUDIO.ctx;AUDIO.ctx=null;AUDIO.enabled=false;AUDIO.lastIndex=-1;
+  const a=AUDIO,ctx=a.ctx;
+  if(a.theme){try{a.theme.dispose();}catch(e){}a.theme=null;}
+  if(a.synth){try{a.synth.dispose();}catch(e){}a.synth=null;}
+  a.ctx=null;a.enabled=false;a.lastIndex=-1;
   if(ctx)ctx.close().catch(()=>{});
-  ROOMVIEW.say('Sound stopped. Loudness ← amplitude; pitch ← phase rotation; stereo ← complex phase.');
+  ROOMVIEW.say('SOUND STOPPED');
+}
+/* One place builds the audio graph, and it is the only place that tears the old
+   one down: the live bench (w-synth.js alone) or the room's own tune
+   (w-theme.js, which lands the same instrument on its bench chain). */
+function audioRebuild(){
+  const a=AUDIO,ctx=a.ctx;
+  if(!ctx)return;
+  if(a.theme){try{a.theme.dispose();}catch(e){}a.theme=null;}
+  if(a.synth){try{a.synth.dispose();}catch(e){}a.synth=null;}
+  try{
+    if(a.themeOn&&typeof THEME!=='undefined'&&THEME.create){
+      a.theme=THEME.create(ctx,{master:a.volume,space:a.space,character:a.character,
+        layout:(typeof SHV!=='undefined'?SHV.G:null)});
+      a.synth=a.theme.synth;
+    }else{
+      a.themeOn=false;
+      a.synth=SYNTH.create(ctx,{master:a.volume,space:a.space,character:a.character});
+    }
+    a.lastIndex=-1;a.lastBar=-1;a.lastLead=-1;a.lastApply=performance.now();
+  }catch(e){stopAudio();ROOMVIEW.say('AUDIO COULD NOT START · '+e.message);}
 }
 function startAudio(){
   if(AUDIO.enabled)return;
-  if(!APP.rec||!APP.rec.re){ROOMVIEW.say('Choose a record or bring a file to hear its waveform.');return;}
+  if(!APP.rec||!APP.rec.re){ROOMVIEW.say('CHOOSE A RECORD TO HEAR IT');return;}
   const AudioCtor=window.AudioContext||window.webkitAudioContext;
-  if(!AudioCtor){ROOMVIEW.say('This browser does not support Web Audio.');return;}
+  if(!AudioCtor){ROOMVIEW.say('NO WEB AUDIO IN THIS BROWSER');return;}
+  if(typeof SYNTH==='undefined'||!SYNTH.create){ROOMVIEW.say('NO INSTRUMENT ABOARD · w-synth.js DID NOT LOAD');return;}
+  if(AUDIO.themeOn&&(typeof THEME==='undefined'||!THEME.create)){AUDIO.themeOn=false;}
   try{
     const ctx=new AudioCtor();AUDIO.ctx=ctx;
-    const fund=ctx.createOscillator(),harm=ctx.createOscillator();
-    const g1=ctx.createGain(),g2=ctx.createGain(),filter=ctx.createBiquadFilter();
-    const pan=ctx.createStereoPanner?ctx.createStereoPanner():null,master=ctx.createGain();
-    fund.type='sine';harm.type='triangle';g1.gain.value=.82;g2.gain.value=.18;
-    filter.type='lowpass';filter.Q.value=.7;master.gain.value=0;
-    fund.connect(g1);harm.connect(g2);g1.connect(filter);g2.connect(filter);
-    if(pan){filter.connect(pan);pan.connect(master);}else filter.connect(master);
-    master.connect(ctx.destination);fund.start();harm.start();
-    Object.assign(AUDIO,{fund,harm,filter,pan,master,enabled:true,lastIndex:-1});
+    AUDIO.enabled=true;
+    audioRebuild();
     playing=true;
     ctx.resume().then(()=>{if(AUDIO.ctx===ctx)updateAudio(true);})
-      .catch(e=>{if(AUDIO.ctx===ctx){stopAudio();ROOMVIEW.say('Audio could not start: '+e.message);}});
-  }catch(e){stopAudio();ROOMVIEW.say('Audio could not start: '+e.message);}
+      .catch(e=>{if(AUDIO.ctx===ctx){stopAudio();ROOMVIEW.say('AUDIO COULD NOT START · '+e.message);}});
+  }catch(e){stopAudio();ROOMVIEW.say('AUDIO COULD NOT START · '+e.message);}
 }
 function updateAudio(force){
-  if(!AUDIO.enabled||!AUDIO.ctx)return;
-  const a=AUDIO,now=a.ctx.currentTime,rec=APP.rec&&APP.rec.re?APP.rec:null;
+  if(!AUDIO.enabled||!AUDIO.ctx||!AUDIO.synth)return;
+  const a=AUDIO,rec=APP.rec&&APP.rec.re?APP.rec:null;
+  /* a stopped press is a silent press, but the graph stays up so the next pull
+     brings it straight back */
   if(!playing||speed<=0||!rec){
-    if(a.lastIndex!==-2){a.master.gain.setTargetAtTime(0,now,.025);a.lastIndex=-2;}return;
+    if(a.lastIndex!==-2){
+      if(a.theme)a.theme.silence(.15);else a.synth.silence(.1);
+      a.lastIndex=-2;
+    }return;
   }
+  /* the real frame time, so the instrument's own clock follows the drive */
+  const now=performance.now(),dt=Math.min(.5,(now-a.lastApply)/1000)||1/60;
+  a.lastApply=now;
   const index=scopeIndex(rec);
-  if(!force&&index===a.lastIndex&&a.lastMode===a.mode&&a.lastVolume===a.volume)return;
-  const v=APP.feedback?sonifyLifeFrame(rec,APP.feedback,index,a.mode,a.reading):sonifyFrame(rec,index,a.mode,a.reading);
-  a.fund.frequency.setTargetAtTime(v.pitch,now,.035);
-  a.harm.frequency.setTargetAtTime(v.pitch*2,now,.035);
-  a.filter.frequency.setTargetAtTime(400+4200*v.brightness,now,.06);
-  if(a.pan)a.pan.pan.setTargetAtTime(v.pan,now,.08);
-  a.master.gain.setTargetAtTime(a.volume*(.003+.45*Math.pow(v.level,.85)),now,.07);
+  if(a.theme){
+    /* the tune reads the same record, the same world and the same field the
+       live mapping does, and it is written every frame: its transport is the
+       press's own drive */
+    const st=a.state;
+    st.rec=rec;st.ph=a.reading;st.stride=scopeStride(rec);st.speed=speed;
+    st.live=clamp(liveN/Math.max(1,M*M),0,1);
+    const i=clamp(index,0,rec.re.length-1),amax=rec.amax||1;
+    const re=rec.re[i]/amax,im=rec.im?rec.im[i]/amax:0;
+    st.mag=Math.min(1,Math.hypot(re,im));st.phase=Math.atan2(im,re);
+    phraseFrame(rec,APP.feedback||null,i,a.mode,a.reading);
+    a.theme.setMaster(a.volume);a.theme.setSpace(a.space);a.theme.setCharacter(a.character);
+    a.theme.step(dt,st);
+    const r=a.theme.report(),key=r.bar*100+r.section;
+    if(key!==a.lastBar){
+      a.lastBar=key;
+      ROOMVIEW.say('THE ROLL · '+r.sectionName+' · BAR '+(r.bar+1)+'/'+THEME.BARS+
+        ' · '+Math.round(r.bpm)+' BPM');
+    }
+    /* the record's own line gets its own announcement: the bar line is written
+       before the bar is played, so the lead can only be reported as it sounds */
+    const lead=Math.round(r.lead);
+    if(lead>0&&lead!==a.lastLead){
+      a.lastLead=lead;
+      ROOMVIEW.say('THE RECORD SINGS · LEAD '+lead+' Hz · '+r.degree);
+    }
+    return;
+  }
+  if(!force&&index===a.lastIndex&&a.lastMode===a.mode&&a.lastVolume===a.volume&&
+    a.lastSpace===a.space&&a.lastCharacter===a.character)return;
+  const v=phraseFrame(rec,APP.feedback||null,index,a.mode,a.reading);
+  a.synth.setMaster(a.volume);a.synth.setSpace(a.space);a.synth.setCharacter(a.character);
+  a.synth.duck(now<APP.duckUntil);          /* the platen landing sits on the mix */
+  a.synth.apply(v,dt);
   a.lastIndex=index;a.lastMode=a.mode;a.lastVolume=a.volume;
-  ROOMVIEW.say((a.mode==='music'?'PHASE MUSIC':'STRAIN TONE')+' · '+Math.round(v.pitch)+
-    ' Hz audible · amplitude '+Math.round(v.level*100)+'% · intentional sonification');
+  a.lastSpace=a.space;a.lastCharacter=a.character;
+  ROOMVIEW.say((a.mode==='music'?'PHASE MUSIC':'STRAIN TONE')+' · '+v.chordName+' · '+v.degree+
+    ' · PLATES '+Math.round(v.voices[0].pitch)+'/'+Math.round(v.voices[1].pitch)+'/'+
+    Math.round(v.voices[2].pitch)+' Hz');
 }
-/* the measured headline for each world; every number here is from that world's
-   probe or from the browser, and none of them are estimates */
-const WORLD_NOTE={
-  synch:'Measured on the record: the board locks 0.84/0.83/0.90 of its cells at 52/76/120 '+
-        'while the global order parameter swings 0.17/0.23/0.29. "Locked" counts cells whose '+
-        'LOCAL order is above 0.9 and r is the GLOBAL phase average, so the two need not '+
-        'agree: coherent domains cancel each other in the global average. The disorder '+
-        'spread scales with board area because recorded phase varies more slowly across '+
-        'neighbouring cards on a larger board; the exponent 0.25 is fitted to this record, '+
-        'not to a physical law. Lock fronts travel: with the record\'s frequencies the '+
-        'central phase gradient runs 0.00 to 0.33 rad/cell over 500 generations.',
-  grav:'Measured on the record at 52x52: mass is conserved exactly over 2000 steps '+
-       '(1386 + 2189 = 3435 + 140, boundary losses counted), but the basin is still filling '+
-       'at the end of that run — mean mass 3025.24 over steps 1501-1750 against 3311.76 '+
-       'over 1751-2000 — so its late statistics describe a transient, not a steady state. '+
-       'Over steps 801-1000 every one of the 200 generations cascades, averaging 1813 '+
-       'topplings with a largest cascade of 3549, and all 200 events exceed 200 topplings: '+
-       'a truncated distribution, and no heavy-tailed law is established. At 120x120 the '+
-       'same parameters are dormant — 6 cascades in 200 generations, 0.03 per generation, '+
-       'against 194 that move nothing. Controls separate the mechanism from a random walk: '+
-       'flat, equal-mass terrain topples 0 times, a drained variant empties instead of '+
-       'piling, and a field with no downhill direction emits nothing.',
-  rd:'Measured on the record at 52x52: the reef turns over rather than settling — its first '+
-     '200 generations hold 763, 504, 423 and 506 live cells at generations 50/100/150/200 — '+
-     'and it reaches 26.7% of the board by generation 2000 with 14 births and 7 deaths in '+
-     'the final 200. The record is in the dynamics, not only in the picture: switching the '+
-     'field to a non-isometric one at generation 500 lands on a different equilibrium — '+
-     '27.15% of the board in 1 blob where the baseline held 26.74% in 5, with a mean-v '+
-     'difference of 0.1199 — and both states keep reacting. On thin substrates it runs '+
-     'near-static instead: 17 of 143 cells on the Hilbert spectrum at 120x120.',
-  life:'A B/S rule on the record\'s self-similarity bands: the one rule family borrowed '+
-       'wholesale rather than driven, though both the substrate and the per-row rules come '+
-       'from the record. Measured: every one of the eight amplitude rows changes the rule '+
-       'in a way the picture can see — 1343 cells under uniform rules against 2796 under '+
-       'row rules by generation 100 — and the record\'s own substrate churns at 16 births '+
-       'and 16 deaths per generation at 52x52, 64 and 64 at 120x120, and 5 and 5 on the '+
-       'raw-gap substrate. Its falling variant ships off by default and is not a pile: at '+
-       '52x52 with gravity the colony thins to 59 cards from 68 and its centroid moves up '+
-       'to row 18.1 from 21.9, because the material the fall strands dies rather than '+
-       'accumulating.'
-};
+/* the operator's dials reach the tune as well as the live bench */
+function audioDial(what){
+  const a=AUDIO;
+  if(what==='space'&&a.theme)a.theme.setSpace(a.space);
+  if(what==='character'&&a.theme)a.theme.setCharacter(a.character);
+  if(what==='volume'){if(a.theme)a.theme.setMaster(a.volume);}
+}
+function audioRoll(){
+  const a=AUDIO;
+  a.themeOn=!a.themeOn;
+  if(a.enabled)audioRebuild();else if(a.themeOn)startAudio();
+  ROOMVIEW.say(a.themeOn?'THE ROLL PLAYS · 16 BARS · 4 SECTIONS':'THE ROLL IS PARKED');
+}
 
 /* ── the shop floor ──────────────────────────────────────────────────────────
    A print shop is not a panel of settings; it is a sequence with consequences,
@@ -331,7 +373,7 @@ function knockBack(why){
     if(typeof SHOPVIEW!=='undefined'&&SHOPVIEW.deliver)SHOPVIEW.deliver('void');
   }
   SHOP.state='makeready';
-  shopSay(why+' — THE PROOF IS VOID');
+  shopSay(why+' · THE PROOF IS VOID');
 }
 /* Each pull advances the paper: a new seed means a new registration slip, a new
    dot phase and a new grain, so two sheets of one edition are two impressions
@@ -371,14 +413,14 @@ function pull(){
     /* a proof is pulled from a stopped press so it can actually be read */
     SHOP.state='proof';playing=false;
     paint();addSheet('proof');
-    shopSay('PROOF PULLED AT GEN '+gen+' — read it, then approve it or change something');
+    shopSay('PROOF PULLED AT GEN '+gen+' · READ IT · APPROVE');
   }else if(st==='proof'){
     SHOP.state='run';playing=true;
-    shopSay('PROOF APPROVED — running the edition of '+SHOP.N+', drive in');
+    shopSay('PROOF APPROVED · EDITION OF '+SHOP.N+' RUNNING');
   }else if(st==='run'){
     paint();addSheet('edition');
     SHOP.n++;advancePaper();
-    if(SHOP.n>SHOP.N){SHOP.state='done';shopSay('RUN COMPLETE — '+SHOP.N+' SHEETS DELIVERED');}
+    if(SHOP.n>SHOP.N){SHOP.state='done';shopSay('RUN COMPLETE · '+SHOP.N+' SHEETS DELIVERED');}
   }else{ newJob();paint();return; }
   paint();
 }
@@ -442,6 +484,8 @@ const API={
     const n=clamp(v,0,1);if(n===SHV.key[i])return;
     SHV.key[i]=n;
     if(R.inkKey)R.inkKey[i]=.30+1.10*n;
+    const tick=Math.round(n*20);
+    if(tick!==INK_TICK[i]){INK_TICK[i]=tick;hitSound('ink',0.10);}
     knockBack('THE INK COVERAGE WAS CHANGED');
   },
   sourceCount(){ return 3; },
@@ -613,7 +657,7 @@ function autoM(){
     if(typeof prepRecord==='function'&&typeof GSFC!=='undefined')setSource('gsfc');
     else throw new Error('no record module: GSFC missing');
     if(entrance.get('station')==='scope')ROOMVIEW.enter('scope');
-    shopSay('JOB 001 ON THE COUNTER — the plates are off register: bring the three pins home');
+    shopSay('JOB 001 · BRING THE THREE PINS HOME');
     /* Source intake loads directly; files placed on the press feed board remain
        physical stock until they are fed into the gripper. */
     const fa=document.getElementById('f_any');

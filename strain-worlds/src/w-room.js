@@ -129,11 +129,11 @@ const ROOMVIEW=(()=>{
       box(g,.05,.45,.58,3.9,z,.07,C.paper);
       for(let n=0;n<10;n++)can(g,.29,.63+n*.36,z+.07,[C.blue,C.coral,C.sun,C.teal][n%4],.24+(n%3)*.05,.11);
     }
-    plaque(g,'INK LIBRARY',.3,2.2,2.85,83,'ink:label');
+    plaque(g,'THE INK LIBRARY',.3,2.2,2.85,83,'ink:label');
     region('ink:shelf',wall('left',.45,4.35,1.65,2.85));
     table(g,.2,4.8,1.2,1.3,.9,C.sun);
     for(let n=0;n<8;n++)poly(g,tile(.25+n%2*.025,4.95,1,.85,1.03+n*.018),C.paper);
-    plaque(g,'BRING A FILE',.8,5.4,1.65,82,'stock:label');
+    plaque(g,'THE LIGHT TABLE',.8,5.4,1.65,82,'stock:label');
     region('stock:paper',tile(.25,4.95,1,.85,1.2));
     // Listening bench. Its screen and speakers are drawn live above this.
     table(g,8.5,.6,3.0,1.5,.97,C.coral);
@@ -160,7 +160,7 @@ const ROOMVIEW=(()=>{
     table(g,4.05,6.45,3.65,1.65,.70,C.blue);
     for(let n=0;n<5;n++)poly(g,tile(4.27,6.58,3.12,1.3,.84+n*.013),C.paper);
     region('press:delivery',tile(4.05,6.45,3.65,1.65,.84));
-    plaque(g,'STEP TO THE PRESS',6.1,7.6,.15,119,'press:label');
+    plaque(g,'THE PRESS',6.1,7.6,.15,119,'press:label');
     for(let n=0;n<3;n++)can(g,8.15+n*.55,3.7,0,[C.blue,C.coral,C.sun][n],.55,.20);
     // Small useful mess: offcuts, a wash bucket, apron, stool and fern.
     for(let k=0;k<9;k++){
@@ -239,8 +239,8 @@ const ROOMVIEW=(()=>{
     g.fillStyle=inkedHex(C.blue);g.fillRect(0,0,700,400);
     for(let x=24;x<686;x+=33)line(g,[[x,24],[x,366]],[.7,.35,.15],.55);
     for(let y=30;y<365;y+=28)line(g,[[24,y],[680,y]],[.7,.35,.15],.55);
-    text(g,APP.feedback?'01  Re: source + LIFE':'01  Re(h)',30,23,12,C.sun);
-    text(g,APP.feedback?'02  Im: source + LIFE':'02  Im(h)',248,23,12,C.coral);
+    text(g,APP.feedback?'01  Re · SOURCE + LIFE':'01  Re(h)',30,23,12,C.sun);
+    text(g,APP.feedback?'02  Im · SOURCE + LIFE':'02  Im(h)',248,23,12,C.coral);
     text(g,'03  '+(APP.wrldId==='synch'?'ORDER r':'OCCUPANCY'),444,23,12,C.paper);
     if(!rec||!rec.re||scan<0)return;
     const n=rec.re.length,span=Math.min(n-1,Math.max(72,Math.round(n*.32))),start=clamp(scan-Math.round(span*.58),0,n-1-span),end=start+span;
@@ -252,7 +252,7 @@ const ROOMVIEW=(()=>{
       const pts=[];for(let i=start;i<=end;i++)pts.push([sx(i),cy-a[i]/amp*38*R.gain]);
       line(g,pts,c,2);line(g,[[sx(scan),cy-45],[sx(scan),cy+45]],C.paper,.9);
       disc(g,sx(scan),cy-a[scan]/amp*38*R.gain,2,c);g.restore();
-      if(APP.feedback)text(g,'source is faint · '+APP.feedback.live+' live cells',29,cy+55,9,C.paper);
+      if(APP.feedback)text(g,'SOURCE IS FAINT · '+APP.feedback.live+' LIVE CELLS',29,cy+55,9,C.paper);
     }
     const count=Math.min(APP.scopeN,APP.scopeHist.length);let lo=1,hi=0;
     for(let k=0;k<count;k++){const v=APP.scopeHist[(APP.scopeN-count+k)%APP.scopeHist.length];lo=Math.min(lo,v);hi=Math.max(hi,v);}
@@ -264,6 +264,55 @@ const ROOMVIEW=(()=>{
     const ti=rec.t?rec.t[scan]:scan;
     text(g,'SAMPLE '+scan+' / '+(n-1)+'     t '+Number(ti).toFixed(3)+'     GAIN '+R.gain.toFixed(2)+'x',29,391,11,C.paper);
   }
+  /* THE ROLL — the room's own tune, punched. The holes are the arrangement
+     itself (THEME.SCORE: sixteen bars of eight half-beats, one lane per
+     artifact), so the roll is a score and not a decoration, and the lead is a
+     continuous slot because the record writes that line live. The section names
+     sit above the tape and the readout below it: nothing inside the tape but
+     the punches and the playhead. */
+  function roll(g,x,y,w,h){
+    const BARS=THEME.BARS,U=BARS*8,cell=w/U;
+    /* the four sections, named at their own divider, above the tape */
+    for(let b=0;b<BARS;b++){
+      if(THEME.SECTION[b]===(b?THEME.SECTION[b-1]:-1))continue;
+      const dx=x+b*8*cell;
+      if(dx>6){text(g,THEME.FORM[THEME.SECTION[b]].name,dx+3,y-5,9.5,C.coral);}
+    }
+    text(g,'LEAD · THE RECORD SINGS',x+w,y-5,9,C.blue,'right');
+    poly(g,[[x,y],[x+w,y],[x+w,y+h],[x,y+h]],C.blue,.10);
+    const rail=Math.max(5,h*.10),holes=Math.max(1,Math.min(3.4,(h-2*rail-4)/8*.34));
+    /* the sprocket rails, top and bottom: the tape is driven by its edges */
+    for(const ry of [y+rail*.5,y+h-rail*.5]){
+      line(g,[[x,ry],[x+w,ry]],C.blue,.7);
+      for(let k=0;k<U;k++)disc(g,x+(k+.5)*cell,ry,Math.min(1.3,cell*.22),C.blue);
+    }
+    /* the punched lanes, in floor order: the machine first, the wall last */
+    const lanes=['platen','sheet','pins','ink','harmony','delivery','tape','wall'];
+    const top=y+rail+2,bot=y+h-rail-2,step=(bot-top)/lanes.length;
+    for(let u=0;u<U;u++){
+      const bit=THEME.SCORE[u]||0;
+      if(!bit)continue;
+      for(let k=0;k<lanes.length;k++){
+        if(!(bit&THEME.HIT[lanes[k]]))continue;
+        disc(g,x+(u+.5)*cell,top+step*(k+.5),holes,C.blue);
+      }
+    }
+    /* the lead: one continuous punched slot, and the bar lines run past it */
+    line(g,[[x+1,y+rail+step*.5],[x+w-1,y+rail+step*.5]],C.coral,Math.max(1.6,step*.30));
+    for(let b=1;b<BARS;b++)line(g,[[x+b*8*cell,top-2],[x+b*8*cell,bot+2]],
+      THEME.SECTION[b]===THEME.SECTION[b-1]?C.blue:C.coral,.8);
+    /* the playhead, and the tune's readout under the tape */
+    const rep=AUDIO.theme&&AUDIO.theme.report();
+    if(AUDIO.themeOn&&rep&&rep.bar>=0){
+      const px=x+(rep.bar*8+rep.unit)*cell;
+      line(g,[[px,top-3],[px,bot+3]],C.teal,1.8);
+      poly(g,[[px-4,top-4],[px+4,top-4],[px,top+3]],C.teal,.9,false);
+      text(g,'BAR '+(rep.bar+1)+'/'+BARS+' · '+rep.sectionName+' · '+Math.round(rep.bpm)+
+        ' BPM · TONIC '+rep.tonic.toFixed(1)+' Hz',x,y+h+16,10,C.teal);
+    }else{
+      text(g,'THE ROLL IS PARKED · TURN THE ROLL KNOB',x,y+h+16,10,C.blue);
+    }
+  }
   function knob(g,id,label,x,y,r,t,readout,collector=Q.knobs){
     collector.push({id,x,y,r});poly(g,ellipse(x,y,r+5,r+5),C.blue,.3);
     disc(g,x,y,r,C.paper);for(let n=0;n<11;n++){const a=-Math.PI*.75+n/10*Math.PI*1.5;line(g,[[x+Math.cos(a)*(r-2),y+Math.sin(a)*(r-2)],[x+Math.cos(a)*(r-6),y+Math.sin(a)*(r-6)]],C.blue,.8);}
@@ -271,23 +320,33 @@ const ROOMVIEW=(()=>{
     disc(g,x,y,3,C.blue);text(g,label,x,y-r-16,11,C.paper,'center');text(g,readout,x,y+r+23,11,C.paper,'center');
   }
   function instrument(g){
-    const W=Q.W,H=Q.H,s=Math.min((W-42)/1020,(H-100)/740),x=(W-960*s)/2,y=(H-680*s)/2;
+    /* The bench reads top to bottom like the instrument it is: the roll the
+       room plays, the scope of what the record is doing while it plays, then
+       the operator's row of dials. One row of eight because the top row is what
+       the sound IS (power, phase law, the room, the ink) and the bottom row is
+       how it is read (gain, sweep, loudness) or written (the roll) — and a
+       bench that fits on a desk beats two rows that do not. */
+    const W=Q.W,H=Q.H,s=Math.min((W-42)/1020,(H-100)/920),x=(W-960*s)/2,y=(H-865*s)/2;
     Q.knobs=[];g.save();g.translate(x,y);g.scale(s,s);
-    poly(g,[[0,25],[40,0],[960,0],[960,645],[0,680]],C.teal,.7);
-    poly(g,[[0,25],[920,25],[920,680],[0,680]],C.blue,.8);
-    for(const [a,b] of [[16,42],[903,42],[16,661],[903,661]]){disc(g,a,b,4,C.paper);line(g,[[a-2,b],[a+2,b]],C.blue,.8);}
+    poly(g,[[0,25],[40,0],[960,0],[960,830],[0,865]],C.teal,.7);
+    poly(g,[[0,25],[920,25],[920,865],[0,865]],C.blue,.8);
+    for(const [a,b] of [[16,42],[903,42],[16,846],[903,846]]){disc(g,a,b,4,C.paper);line(g,[[a-2,b],[a+2,b]],C.blue,.8);}
     text(g,'THE LISTENING BENCH',40,64,17,C.paper);
-    text(g,'ANALYTIC RECORD / WORLD RESPONSE',880,64,11,C.paper,'right');
-    poly(g,[[37,85],[882,85],[882,490],[37,490]],C.paper);g.drawImage(Q.scope,45,93,828,388);
+    if(typeof THEME!=='undefined'&&THEME.SCORE)roll(g,45,102,828,116);
+    poly(g,[[37,250],[882,250],[882,650],[37,650]],C.paper);g.drawImage(Q.scope,45,258,828,388);
     const defs=[['sound','POWER',AUDIO.enabled?1:0,AUDIO.enabled?'SOUND ON':'SILENT'],
       ['mode','PHASE',AUDIO.mode==='music'?1:0,AUDIO.mode==='music'?'PENTATONIC':'CONTINUOUS'],
-      ['gain','DISPLAY GAIN',(R.gain-.25)/3.75,R.gain.toFixed(2)+'x'],
-      ['offset','SWEEP OFFSET',APP.scopeOffset/100,APP.scopeOffset.toFixed(0)+'%'],
-      ['volume','LOUDNESS',AUDIO.volume,Math.round(AUDIO.volume*100)+'%']];
-    defs.forEach((d,k)=>knob(g,d[0],d[1],112+k*173,565,29,d[2],d[3]));
-    text(g,'Amplitude → loudness. Phase rotation → pitch. Complex phase → stereo.',460,646,11,C.paper,'center');
+      ['space','ROOM',AUDIO.space,Math.round(AUDIO.space*100)+'%'],
+      ['character','DIRT',AUDIO.character,Math.round(AUDIO.character*100)+'%'],
+      ['gain','GAIN',(R.gain-.25)/3.75,R.gain.toFixed(2)+'x'],
+      ['offset','SWEEP',APP.scopeOffset/100,APP.scopeOffset.toFixed(0)+'%'],
+      ['volume','VOLUME',AUDIO.volume,Math.round(AUDIO.volume*100)+'%'],
+      ['theme','THE ROLL',AUDIO.themeOn?1:0,AUDIO.themeOn?'PLAYING':'PARKED']];
+    defs.forEach((d,k)=>knob(g,d[0],d[1],95+k*110,710,26,d[2],d[3]));
+    text(g,'AMPLITUDE → LOUDNESS · PHASE → PITCH · STEREO',460,792,11,C.paper,'center');
+    text(g,'THREE PLATES · THREE VOICES',460,810,11,C.paper,'center');
     g.restore();Q.knobs.forEach(k=>{k.x=x+k.x*s;k.y=y+k.y*s;k.r*=s;});
-    text(g,Q.note||'Intentional sonification — not a recording of a sound in space.',W/2,H-23,Math.min(12,W/66),C.blue,'center');
+    text(g,Q.note||'THE RECORD PLAYED · NOT A RECORDING',W/2,H-23,Math.min(12,W/66),C.blue,'center');
     back(g);
   }
   function back(g){
@@ -321,7 +380,7 @@ const ROOMVIEW=(()=>{
     Q.art.getContext('2d').drawImage(document.getElementById('stage'),0,0,px,px,0,0,px,px);
     ctx.fillStyle=inkedHex(C.paper);ctx.fillRect(0,0,Q.W,Q.H);
     if(Q.mode==='ink'){Object.assign(Q,INK_STATION.paint(ctx,Q.W,Q.H,Q.art));stationNote(ctx);back(ctx);return;}
-    text(ctx,'a record, a room, a small world.',Q.W/2,42,Math.min(17,Q.W/27),C.blue,'center');
+    text(ctx,'A RECORD · A ROOM · A SMALL WORLD',Q.W/2,42,Math.min(17,Q.W/27),C.blue,'center');
     text(ctx,'THE PRESS TAKES COMMISSIONS',Q.W/2,64,Math.min(10,Q.W/42),C.coral,'center');
     ctx.save();ctx.translate(Q.ox,Q.oy);ctx.scale(Q.scale,Q.scale);
     ctx.drawImage(Q.backdrop,-380,-140,800,560);
@@ -345,8 +404,8 @@ const ROOMVIEW=(()=>{
     }
     ctx.restore();
     const small=Math.min(11,Q.W/59);
-    text(ctx,'Click the press to work · click the bench to listen · drag to wander · scroll to look closer',Q.W/2,Q.H-40,small,C.blue,'center');
-    text(ctx,(APP.rec?.name||'record')+'  /  '+(APP.world?.label||'')+'  /  '+SHOP.pulled.length+' sheets delivered',Q.W/2,Q.H-20,Math.min(10,Q.W/76),C.blue,'center');
+    text(ctx,'CLICK A STATION · DRAG TO WANDER · SCROLL IN',Q.W/2,Q.H-40,small,C.blue,'center');
+    text(ctx,(APP.rec?.name||'RECORD').toUpperCase()+' · '+(APP.world?.label||'')+' · '+SHOP.pulled.length+' SHEETS DELIVERED',Q.W/2,Q.H-20,Math.min(10,Q.W/76),C.blue,'center');
   }
   function stationNote(g){if(Q.note)text(g,Q.note,Q.W/2,Q.H-19,Math.min(11,Q.W/95),C.blue,'center');}
   function enter(mode){Q.previous=Q.mode;Q.mode=mode;Q.frame=-1;Q.drag=null;Q.hover='';Q.note='';Q.actions=[];Q.knobs=[];SHV.drag=null;SHV.shake=null;SHV.grab=null;paint();}
@@ -355,14 +414,19 @@ const ROOMVIEW=(()=>{
     if(id==='gain')R.gain=Math.round((.25+v*3.75)*20)/20;
     if(id==='offset')APP.scopeOffset=Math.round(v*100);
     if(id==='volume')AUDIO.volume=v;
+    if(id==='space')AUDIO.space=v;
+    if(id==='character')AUDIO.character=v;
     if(id==='harmonics')API.setHarmonics(1+v*1022);
     if(id.startsWith('ink:'))API.setInkKey(Number(id.slice(4)),v);
     Q.frame=-1;paint();
+    audioDial(id);
     updateAudio(true);
   }
   function value(id){return id==='gain'?(R.gain-.25)/3.75:id==='offset'?APP.scopeOffset/100:
+    id==='space'?AUDIO.space:id==='character'?AUDIO.character:
+    id==='theme'?(AUDIO.themeOn?1:0):
     id==='harmonics'?(API.harmonics()-1)/1022:id.startsWith('ink:')?SHV.key[Number(id.slice(4))]:AUDIO.volume;}
-  function adjustable(id){return ['gain','offset','volume','harmonics'].includes(id)||id.startsWith('ink:');}
+  function adjustable(id){return ['gain','offset','volume','space','character','harmonics'].includes(id)||id.startsWith('ink:');}
   function navigationAt(x,y){return Q.mode==='room'?null:Q.navigation.find(e=>x>=e.x&&x<=e.x+e.w&&y>=e.y&&y<=e.y+e.h);}
   function down(e,x,y){
     const nav=navigationAt(x,y);if(nav){enter(nav.id);return true;}
@@ -390,9 +454,10 @@ const ROOMVIEW=(()=>{
       if(Q.mode==='room'){
         if(['press','scope','stock','ink'].includes(d.id))enter(d.id);
       }else if(d.id==='sound'){AUDIO.enabled?stopAudio():startAudio();}
+      else if(d.id==='theme'){audioRoll();}
       else if(d.id==='mode'){AUDIO.mode=AUDIO.mode==='tone'?'music':'tone';updateAudio(true);}
       else if(d.id==='source:open')SHOPVIEW.openPicker();
-      else if(d.id.startsWith('source:')){API.setSource(d.id.slice(7));Q.note='Source ready. Continue at the press.';Q.frame=-1;paint();}
+      else if(d.id.startsWith('source:')){API.setSource(d.id.slice(7));hitSound('sheet',0.45);Q.note='SOURCE READY · CONTINUE AT THE PRESS';Q.frame=-1;paint();}
     }
     try{document.getElementById('stage').releasePointerCapture(e.pointerId);}catch(_){}
     return true;
