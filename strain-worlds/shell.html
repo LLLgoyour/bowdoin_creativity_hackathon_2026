@@ -11,6 +11,11 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0a0f1c;color:#f6e7c8;
   background:#f6c344;color:#2a1a10;border:3px solid #2a1a10;font-weight:700;cursor:pointer;
   box-shadow:0 4px 0 #120b06}
 #chip:active{transform:translateY(2px);box-shadow:0 2px 0 #120b06}
+#soundchip{position:fixed;top:10px;right:104px;z-index:6;padding:8px 13px;
+  border:2px solid #79dca7;border-radius:999px;background:#102b25;color:#b8ffd3;
+  font:700 12px ui-rounded,system-ui,sans-serif;cursor:pointer;
+  box-shadow:0 3px 14px rgba(0,0,0,.45)}
+#soundchip.on{background:#a3f1bc;color:#102b25}
 #rail{position:fixed;top:0;left:0;bottom:0;width:306px;z-index:5;overflow-y:auto;
   padding:12px 12px 24px;background:linear-gradient(#1b2338,#141a2c);
   border-right:5px solid #2a1a10;box-shadow:6px 0 22px rgba(0,0,0,.45)}
@@ -36,6 +41,7 @@ canvas.panel{display:block;width:100%;border:3px solid #2a1a10;border-radius:11p
 #note{font-size:11px;color:#cfe0ff;margin:7px 0 0}
 #note b{color:#f6c344}
 #hudtxt{font-size:11.5px;color:#f6c344;margin:8px 0 0;letter-spacing:.03em}
+#sound_note{font-size:10px;color:#b8e9ca;margin:7px 1px 0;line-height:1.5}
 #ticker{position:fixed;left:306px;right:0;bottom:0;z-index:4;padding:5px 12px;
   background:linear-gradient(transparent,rgba(6,9,17,.92));font-size:11.5px;color:#f6c344;
   letter-spacing:.04em;text-align:center;pointer-events:none}
@@ -43,6 +49,7 @@ canvas.panel{display:block;width:100%;border:3px solid #2a1a10;border-radius:11p
 </style></head><body>
 <canvas id="stage"></canvas>
 <div id="chip">panel</div>
+<button id="soundchip" type="button" aria-pressed="false">▶ sound</button>
 <div id="ticker"></div>
 <div id="rail">
   <h1>STRAIN → WORLDS<small>one record, four ways to make it move</small></h1>
@@ -65,6 +72,15 @@ canvas.panel{display:block;width:100%;border:3px solid #2a1a10;border-radius:11p
     <div class="chips" id="wrlds"></div>
     <div id="params"></div>
     <div id="wnote" class="note"></div>
+  </fieldset>
+
+  <fieldset><legend>4 · SONIFICATION</legend>
+    <div class="chips">
+      <div class="chip on" id="m_tone">strain tone</div>
+      <div class="chip" id="m_music">phase music</div>
+    </div>
+    <div class="row"><label>volume</label><input type="range" id="r_volume" min="0" max="100" step="1"><output id="o_volume"></output></div>
+    <div id="sound_note">Press ▶ sound. Loudness follows |h|; pitch follows phase rotation. The melodic mode turns quarter-cycles into notes.</div>
   </fieldset>
 
   <fieldset><legend>PLAY</legend>
@@ -93,6 +109,7 @@ canvas.panel{display:block;width:100%;border:3px solid #2a1a10;border-radius:11p
 <script src="src/w-rd.js"></script>
 <script src="src/w-life.js"></script>
 <script src="src/data-gsfc.js"></script>
+<script src="src/w-sonify.js"></script>
 <script src="src/w-render.js"></script>
 <script src="src/w-app.js"></script>
 </body></html>

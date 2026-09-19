@@ -122,6 +122,66 @@ function recordScopePoint(){
   APP.scopeHist[APP.scopeN%APP.scopeHist.length]=clamp(value,0,1);
   APP.scopeN++;
 }
+/* Web Audio starts only after the audience presses the sound button. The
+   scanner and the synth read the same sample index; neither edits the record. */
+const AUDIO={ctx:null,enabled:false,mode:'tone',volume:0.65,lastIndex:-1,
+  lastMode:'',lastVolume:-1,reading:{}};
+function audioButton(){
+  $('soundchip').textContent=AUDIO.enabled?'■ stop sound':'▶ sound';
+  $('soundchip').classList.toggle('on',AUDIO.enabled);
+  $('soundchip').setAttribute('aria-pressed',String(AUDIO.enabled));
+}
+function stopAudio(){
+  const ctx=AUDIO.ctx;
+  AUDIO.ctx=null;AUDIO.enabled=false;AUDIO.lastIndex=-1;
+  if(ctx)ctx.close().catch(()=>{});
+  audioButton();
+  $('sound_note').textContent='Sound stopped. Loudness ← |h|; pitch ← phase rotation; stereo ← complex phase.';
+}
+function startAudio(){
+  if(!APP.rec||!APP.rec.re){
+    $('sound_note').textContent='Choose GSFC strain, noise, or a numeric file to hear data.';
+    return;
+  }
+  const AudioCtor=window.AudioContext||window.webkitAudioContext;
+  if(!AudioCtor){$('sound_note').textContent='This browser does not support Web Audio.';return;}
+  try{
+    const ctx=new AudioCtor(),fund=ctx.createOscillator(),harm=ctx.createOscillator();
+    const g1=ctx.createGain(),g2=ctx.createGain(),filter=ctx.createBiquadFilter();
+    const pan=ctx.createStereoPanner?ctx.createStereoPanner():null,master=ctx.createGain();
+    fund.type='sine';harm.type='triangle';g1.gain.value=0.82;g2.gain.value=0.18;
+    filter.type='lowpass';filter.Q.value=0.7;master.gain.value=0;
+    fund.connect(g1);harm.connect(g2);g1.connect(filter);g2.connect(filter);
+    if(pan){filter.connect(pan);pan.connect(master);}else filter.connect(master);
+    master.connect(ctx.destination);fund.start();harm.start();
+    Object.assign(AUDIO,{ctx,fund,harm,filter,pan,master,enabled:true,lastIndex:-1});
+    if(!playing){playing=true;$('b_play').textContent='⏸ pause';}
+    audioButton();
+    ctx.resume().then(()=>{if(AUDIO.ctx===ctx)updateAudio(true);})
+      .catch(e=>{if(AUDIO.ctx===ctx){stopAudio();$('sound_note').textContent='Audio could not start: '+e.message;}});
+  }catch(e){stopAudio();$('sound_note').textContent='Audio could not start: '+e.message;}
+}
+function updateAudio(force){
+  if(!AUDIO.enabled||!AUDIO.ctx)return;
+  const a=AUDIO,ctx=a.ctx,now=ctx.currentTime;
+  const rec=APP.rec&&APP.rec.re?APP.rec:null;
+  if(!playing||speed<=0||!rec){
+    if(a.lastIndex!==-2){a.master.gain.setTargetAtTime(0,now,0.025);a.lastIndex=-2;}
+    return;
+  }
+  const index=scopeIndex(rec);
+  if(!force&&index===a.lastIndex&&a.lastMode===a.mode&&a.lastVolume===a.volume)return;
+  const v=sonifyFrame(rec,index,a.mode,a.reading);
+  a.fund.frequency.setTargetAtTime(v.pitch,now,0.035);
+  a.harm.frequency.setTargetAtTime(v.pitch*2,now,0.035);
+  a.filter.frequency.setTargetAtTime(400+4200*v.brightness,now,0.06);
+  if(a.pan)a.pan.pan.setTargetAtTime(v.pan,now,0.08);
+  a.master.gain.setTargetAtTime(a.volume*(0.003+0.45*Math.pow(v.level,0.85)),now,0.07);
+  a.lastIndex=index;a.lastMode=a.mode;a.lastVolume=a.volume;
+  $('sound_note').textContent=(a.mode==='music'?'PHASE MUSIC':'STRAIN TONE')+
+    ' · '+Math.round(v.pitch)+' Hz audible · |h| '+Math.round(v.level*100)+
+    '% · phase rate '+v.sourceHz.toFixed(3)+' Hz';
+}
 function rebuild(){
   try{
     buildField();
@@ -131,13 +191,14 @@ function rebuild(){
     drawParams();
     updateNotes();
     shakeMsg='';shakeUntil=0;APP.lastShake='';
+    AUDIO.lastIndex=-1;
     paint();
   }catch(e){fail(e);}
 }
 function reseed(){                       /* same record, same field, new seed */
   APP.seed=(APP.seed+1)|0;
   if(APP.srcId==='noise'&&APP.rec)APP.rec=recFromNoise();
-  try{ if(APP.srcId==='noise')buildField(); startWorld(); paint(); }catch(e){fail(e);}
+  try{ if(APP.srcId==='noise')buildField(); startWorld(); AUDIO.lastIndex=-1;paint(); }catch(e){fail(e);}
 }
 
 /* ── the loop ────────────────────────────────────────────────────────────── */
@@ -189,6 +250,7 @@ function frame(){
       paint();
     }
   }
+  updateAudio(false);
 }
 function updateHud(){
   if(lastErr&&$('hudtxt').textContent.startsWith('ERROR'))return;
@@ -413,7 +475,20 @@ function bindOnce(){
   });
   $('b_play').addEventListener('click',()=>{
     playing=!playing;$('b_play').textContent=playing?'⏸ pause':'▶ play';
+    updateAudio(true);
   });
+  $('soundchip').addEventListener('click',()=>AUDIO.enabled?stopAudio():startAudio());
+  const chooseAudioMode=mode=>{
+    AUDIO.mode=mode;
+    $('m_tone').classList.toggle('on',mode==='tone');
+    $('m_music').classList.toggle('on',mode==='music');
+    if(AUDIO.enabled)updateAudio(true);
+    else $('sound_note').textContent=mode==='music'
+      ?'Press ▶ sound. Each quarter-turn of the strain phase selects a pentatonic note; |h| sets loudness.'
+      :'Press ▶ sound. Pitch follows phase rotation; |h| sets loudness.';
+  };
+  $('m_tone').addEventListener('click',()=>chooseAudioMode('tone'));
+  $('m_music').addEventListener('click',()=>chooseAudioMode('music'));
   $('b_step').addEventListener('click',()=>{
     if(!APP.world||!APP.S)return;
     try{decaySpark();APP.world.step(APP.S,APP.field,APP.pw);gen++;
@@ -434,7 +509,13 @@ function bindOnce(){
     relayout();
   });
   const sp=$('r_speed');sp.value=speed;$('o_speed').value=speed;
-  sp.addEventListener('input',()=>{speed=parseFloat(sp.value);$('o_speed').value=speed;});
+  sp.addEventListener('input',()=>{speed=parseFloat(sp.value);$('o_speed').value=speed;updateAudio(true);});
+  const volume=$('r_volume');volume.value=Math.round(AUDIO.volume*100);
+  $('o_volume').value=volume.value+'%';
+  volume.addEventListener('input',()=>{
+    AUDIO.volume=parseInt(volume.value,10)/100;$('o_volume').value=volume.value+'%';
+    updateAudio(true);
+  });
   const sz=$('r_size');
   sz.addEventListener('input',()=>{
     Muser=true;M=parseInt(sz.value,10);$('o_size').value=M;
@@ -451,7 +532,7 @@ function bindOnce(){
   const gain=$('r_gain');gain.value=R.gain;$('o_gain').value=R.gain.toFixed(2)+'×';
   gain.addEventListener('input',()=>{R.gain=parseFloat(gain.value);$('o_gain').value=R.gain.toFixed(2)+'×';paint();});
   const offset=$('r_offset');offset.value=APP.scopeOffset;$('o_offset').value=APP.scopeOffset+'%';
-  offset.addEventListener('input',()=>{APP.scopeOffset=parseInt(offset.value,10);$('o_offset').value=APP.scopeOffset+'%';paint();});
+  offset.addEventListener('input',()=>{APP.scopeOffset=parseInt(offset.value,10);$('o_offset').value=APP.scopeOffset+'%';paint();updateAudio(true);});
   window.addEventListener('resize',()=>relayout());
 }
 function toggleScope(){

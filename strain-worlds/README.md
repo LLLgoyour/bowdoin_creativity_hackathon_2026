@@ -59,6 +59,24 @@ vertical display scale of the two source traces; it never changes the samples.
 Pause, step, reseed and shake still work in either view. Numeric files dropped
 onto the page use the same two-channel scope; images show the world trace alone.
 
+## Hear the strain
+
+Press **▶ sound** at the top of the page to start Web Audio after a user gesture.
+The synth follows the oscilloscope's sample cursor, and mutes when the world is
+paused. **Strain tone** maps the record's phase-rotation rate, shifted into
+the audible range, to continuous pitch. **Phase music** maps each quarter-turn
+of phase to the next note of a C pentatonic pattern. In both modes the measured
+amplitude `|h|` controls loudness, `Re(h)/|h|` controls stereo position, and
+amplitude also opens a low-pass filter. The volume slider affects only output
+level. The sound is a sonification of numerical data, not a microphone recording
+or a claim about sound propagating through space. The mapping is tested by
+`node tools/probe-sonify.mjs`.
+
+`node tools/render-sonification.mjs` also creates
+`builds/gsfc-phase-music.wav`, a 28-second full-record preview of the melodic
+mapping. The interactive single-file page makes its audio live in Web Audio
+and does not need the WAV file.
+
 ## The record
 
 `src/data-gsfc.js` holds the GSFC QC6 strain record as base64 Float64 blocks:
