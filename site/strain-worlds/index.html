@@ -1282,7 +1282,7 @@ function trackActivity(S){
 
 defWorld({
   id:'grav', label:'GRAVITY',
-  blurb:'Loud valleys collect avalanches. Eyes rank 2+ piles rested 40 generations by height, then age; at most a quarter of live piles.',
+  blurb:'Loud valleys collect avalanches; the eyes are the tallest rested piles.',
   params:[
     {key:'gravity',label:'terrain gravity',min:0,max:8,step:0.1,def:3},
     {key:'slope',label:'topple above (4-card minimum)',min:2,max:8,step:1,def:4},
@@ -1549,7 +1549,7 @@ defWorld({
   }
   defWorld({
     id: 'rd', label: 'REACTION',
-    blurb: 'A mask-confined two-chemical reef. Eyes: age ≥ 60, v ≥ 0.30, concave on both axes; rank higher v, older age, lower index, capped at floor(live/4). Near-static sparse regimes: GSFC spectro has 2 births/1 retreat in steps 1801–2000; HST has 17 cards on 143 substrate cells at step 120.',
+    blurb: 'A mask-confined two-chemical reef; the eyes are old, concentrated, concave cells.',
     params: [
       { key: 'F', label: 'feed F', min: 0.01, max: 0.09, step: 0.001, def: 0.037 },
       { key: 'k', label: 'kill k', min: 0.04, max: 0.07, step: 0.001, def: 0.06 },
@@ -1916,7 +1916,7 @@ const GSFC={name:"GSFC_QC6_strain_2_2.dat.txt",n:773,t:"gfJE/gP26D+ZoUz+grjyPyKC
 /* Pure mapping from a prepared complex record to audible control values.
    The signal's source frequency is sub-audible; the output is an intentional
    sonification, never a claim that the numerical-relativity file is audio. */
-const SONIFY_SCALE=[0,2,4,7,9]; // C major pentatonic, repeated over two octaves
+const SONIFY_SCALE=[1,9/8,5/4,3/2,5/3]; // just intonation: the five slots the plates print
 function sonifyFrame(rec,index,mode,out){
   out=out||{};
   if(!rec||!rec.re||!rec.re.length){
@@ -1933,7 +1933,7 @@ function sonifyFrame(rec,index,mode,out){
   const turns=Math.abs(phase-(rec.ph?rec.ph[0]:0));
   const step=rec.turns>=0.25?Math.floor(turns/(Math.PI/2)):Math.floor(level*10);
   const degree=step%SONIFY_SCALE.length,octave=Math.floor(step/SONIFY_SCALE.length)%2;
-  const melodic=130.81278265*Math.pow(2,(SONIFY_SCALE[degree]+12*octave)/12);
+  const melodic=130.81278265*SONIFY_SCALE[degree]*Math.pow(2,octave);
   out.pitch=mode==='music'?melodic:clamp(110+5500*sourceHz,110,800);
   out.level=level;
   out.pan=mag>1e-9?clamp(re/mag,-0.75,0.75):0;
@@ -1997,6 +1997,204 @@ function sonifyLifeFrame(rec,feedback,index,mode,out){
   out.level=clamp(feedback.amp[i]/peak,0,1);
   out.pan=clamp(re,-0.75,0.75);
   out.brightness=out.level;
+  return out;
+}
+</script>
+<script>
+/* ═══════════════════════════════════════════════════════════════════════════
+   w-phrase.js — WHAT THE THREE PLATES PLAY. One pure function, one sample
+   cursor in, one chord out. No audio nodes, no DOM, no per-frame allocation:
+   the caller owns `out` and its three voice objects, and this file only writes
+   numbers into them, in constant time.
+
+   It is a superset of sonifyLifeFrame. The fields that function already fills —
+   pitch, level, pan, brightness, sourceHz, noteStep — are produced by calling
+   it, so they are bit-identical to it, and the printed claims that rest on them
+   stay true. Everything below is what the three plates add.
+
+   THE MAPPING (this paragraph is the printed claim; every clause is the code
+   in phraseFrame):
+
+   · Cursor. index selects one sample of the prepared record and, one sample
+     back, its neighbour. Nothing here looks at any other sample.
+
+   · Key. prepRecord unwrapped the record's complex phasor into an accumulated
+     phase (rec.ph, radians). Its rotation since the sample of index 0, divided
+     by a quarter turn (π/2 rad), is the note step — the same quantisation the
+     existing mapping documents. A record that turns less than a quarter turn in
+     total (rec.turns < 0.25) has no rotation to read and takes its step from
+     amplitude instead, floor(10 × amplitude), exactly as before. The step
+     selects one of fifteen slots of the five-slot just-intonation grid this
+     file shares with w-sonify.js (1/1, 9/8, 5/4, 3/2, 5/3 over the
+     130.81278265 Hz C3), stretched over three octaves; that slot is the
+     chord's tonic, printed as out.root in Hz.
+
+   · Chord. The tonic's position in the five-slot octave (the scale degree,
+     printed 1-5 as out.degree) picks the voicing: DEG 1 root-fifth-octave,
+     DEG 2 root-third-octave, DEG 3 root-fifth-ninth, DEG 4 root-second-octave,
+     DEG 5 root-third-sixth. BLUE sounds the tonic, FLUORESCENT PINK the middle
+     tone, YELLOW the top tone; the voicing stacks above the tonic slot, so the
+     top plate can sit above the three-octave grid. out.chordName prints the
+     tonic slot's ratio and the voicing's three ratios above it, e.g.
+     '1/1 · 1/1 · 3/2 · 1/1 ×2' — a name for the ratios the mapping asks for,
+     never an invented number.
+
+   · Mode. 'music' places every voice on that grid, and rounds the feedback bend
+     below to whole scale steps, so a bend never leaves the key. 'tone' keeps
+     the continuous sweep the existing mapping documents: BLUE sounds out.pitch
+     itself (the record's instantaneous phase-rotation rate mapped to 110-800
+     Hz) and PINK and YELLOW sound that same sweep at the chord's intervals,
+     bent continuously rather than snapped. The voices are held inside
+     55-4000 Hz. In music mode the plates are the chord on the current grid
+     slot while out.pitch stays the melodic line the existing mapping prints:
+     the two agree pitch for pitch while the record's rotation is inside its
+     first two octaves and neither is bent, and part company above that — the
+     plates keep climbing the third octave the grid covers while the melodic
+     line folds back an octave — and wherever a bend differs, because the plates
+     snap their bend to scale steps and the melodic line rounds its to
+     semitones.
+
+   · LIFE feedback. While the LIFE world runs, its feedback wave — the live
+     colony turned into a complex phasor, as lifeFeedback builds it — is read at
+     the same cursor. Its real component (the in-phase column mass) bends pitch
+     and sets stereo position, its imaginary component (the quadrature part)
+     bends pitch a second time and drifts tuning, and PINK and YELLOW add their
+     own bend on top of the leader's. Each plate bends by its own gain (BLUE
+     1.00, PINK 1.35, YELLOW 0.75), so the three plates separate audibly rather
+     than moving as one. The colony's activity (which falls to 0 when no cell is
+     alive) gates the plates, and the feedback amplitude at the cursor is their
+     loudness.
+
+   · The record's own quantity in each case: amplitude is loudness, phase
+     rotation is pitch, and the complex phase at the cursor is stereo position.
+
+   · Ink keys are the mix. Plate i's level and brightness are that plate's
+     coverage, clamp(0.30 + 1.10 × SHV.key[i], 0, 1) — the press's own key
+     equation, read defensively and defaulting to 0.64 before the shop has set
+     the dial — times the record's own level and brightness; its gate is that
+     coverage times the colony's activity, and the coverage alone when no
+     feedback wave is supplied at all — when the LIFE world is not the world the
+     press is running; and its tuning is a static plate trim (0, −6,
+     +6 cents) plus a drift of up to ±18 cents scaled by the plate's own bend
+     gain. Nothing here reads a dial at load time.
+
+   · Adjacent plates modulate each other: each voice's fm is the ratio of the
+     next plate's pitch to its own (modulator cycles per carrier cycle, a
+     ratio, not a frequency — the interval the chord already names) and fmDepth
+     is how deep that modulation runs: a floor set by the plate's coverage and
+     the record's brightness, lifted by the quadrature component of the feedback
+     at that cursor.
+
+   · move is true exactly at a sample whose note step differs from the previous
+     sample's step, so whoever is listening for a note event can strike one. It
+     is a property of the record and the index, never of call history.
+
+   · activity is the colony's live activity at this cursor (0 when the LIFE
+     world is not the world the press is running, or when it is extinct).
+
+   The output is an intentional sonification, and the honest sentence for the
+   sheet: nothing here claims the numerical-relativity file is audio.
+   ═══════════════════════════════════════════════════════════════════════════ */
+const PHRASE_REF=130.81278265;      /* C3, the reference w-sonify.js already uses */
+const PHRASE_SCALE=[1,9/8,5/4,3/2,5/3];  /* just intonation: five slots to the octave */
+const PHRASE_SLOTS=15;              /* those five slots over three octaves */
+const PHRASE_RATIO=['1/1','9/8','5/4','3/2','5/3'];  /* the same five, as printed */
+/* the voicing each scale degree asks for, as scale steps above the tonic:
+   DEG 1 root-fifth-octave, DEG 2 root-third-octave, DEG 3 root-fifth-ninth,
+   DEG 4 root-second-octave, DEG 5 root-third-sixth */
+const PHRASE_SHAPE=[[0,3,5],[0,2,5],[0,3,6],[0,1,5],[0,2,4]];
+const PHRASE_DEGREE=['DEG 1','DEG 2','DEG 3','DEG 4','DEG 5'];
+const PHRASE_BEND=[1.00,1.35,0.75];                 /* each plate's own bend gain */
+const PHRASE_TRIM=[0,-6,6];                         /* static plate trim, cents */
+const PHRASE_PAN=[0,0.25,-0.25];                    /* plate spread with no colony */
+const PHRASE_PAN_C=[1,0.766044443118978,-0.766044443118978]; /* cos of 0, ±40 degrees */
+const PHRASE_PAN_S=[0,0.642787609686539,0.642787609686539];  /* sin of the same */
+const PHRASE_PREV={};               /* one scratch object, rewritten every call */
+
+function phraseSlotDegree(slot){return ((slot%5)+5)%5;}
+function phraseSlotOctave(slot,deg){return (slot-deg)/5;}
+/* one slot of the three-octave grid, on the same reference w-sonify.js uses and
+   on the same five ratios, so slot k below the third octave is the pitch that
+   mapping already names */
+function phraseSlotHz(slot){
+  const deg=phraseSlotDegree(slot);
+  return PHRASE_REF*PHRASE_SCALE[deg]*Math.pow(2,phraseSlotOctave(slot,deg));
+}
+function phraseSlotName(slot){
+  const deg=phraseSlotDegree(slot),oct=phraseSlotOctave(slot,deg);
+  return PHRASE_RATIO[deg]+(oct?' ×'+(1<<oct):'');
+}
+/* the lettering table: one name per tonic slot, built once at load, because a
+   string built while the machine is running would be an allocation per frame */
+const PHRASE_CHORD=(()=>{
+  const names=[];
+  for(let s=0;s<PHRASE_SLOTS;s++){
+    const sh=PHRASE_SHAPE[phraseSlotDegree(s)];
+    names.push(phraseSlotName(s)+' · '+sh.map(k=>phraseSlotName(s+k)).join(' · '));
+  }
+  return names;
+})();
+
+/* The record, the LIFE colony and the three ink keys become one chord. `out` is
+   the caller's, and so are out.voices' three objects: they are created on the
+   first call and only ever written in place after that. */
+function phraseFrame(rec,feedback,index,mode,out){
+  /* the shared fields come from the existing mapping itself — sonifyLifeFrame
+     falls through to sonifyFrame when there is no colony — so pitch, level,
+     pan, brightness, sourceHz and noteStep are bit-identical to it, including
+     its empty-record path */
+  out=sonifyLifeFrame(rec,feedback,index,mode,out);
+  let voices=out.voices;
+  if(!voices||voices.length!==3){
+    voices=[{pitch:0,level:0,pan:0,brightness:0,fm:1,fmDepth:0,detune:0,gate:0},
+      {pitch:0,level:0,pan:0,brightness:0,fm:1,fmDepth:0,detune:0,gate:0},
+      {pitch:0,level:0,pan:0,brightness:0,fm:1,fmDepth:0,detune:0,gate:0}];
+    out.voices=voices;
+  }
+  if(!rec||!rec.re||!rec.re.length){
+    out.root=0;out.move=false;out.activity=0;out.degree='NO RECORD';out.chordName='SILENT';
+    for(let j=0;j<3;j++){const v=voices[j];
+      v.pitch=0;v.level=0;v.pan=0;v.brightness=0;v.fm=1;v.fmDepth=0;v.detune=0;v.gate=0;}
+    return out;
+  }
+  const i=clamp(index|0,0,rec.re.length-1);
+  const step=out.noteStep,music=mode==='music',peak=rec.amax||1;
+  const slot=((step%PHRASE_SLOTS)+PHRASE_SLOTS)%PHRASE_SLOTS,degree=slot%5;
+  const fi=feedback?clamp(i,0,feedback.re.length-1):0;
+  const fre=feedback?feedback.re[fi]/peak:0,fim=feedback?feedback.im[fi]/peak:0;
+  const act=feedback?clamp(feedback.activity||0,0,1):0;
+  const key=(typeof SHV!=='undefined'&&SHV&&SHV.key)?SHV.key:null;
+  const sh=PHRASE_SHAPE[degree];
+
+  out.root=phraseSlotHz(slot);
+  out.degree=PHRASE_DEGREE[degree];
+  out.chordName=PHRASE_CHORD[slot];
+  out.activity=act;
+  /* a note event is a change in the record's own quantisation, so it is read
+     from the record's previous sample and not from any call history */
+  out.move=i>0&&step!==sonifyFrame(rec,i-1,mode,PHRASE_PREV).noteStep;
+
+  for(let j=0;j<3;j++){
+    const v=voices[j];
+    const cov=clamp(0.30+1.10*(key&&key[j]!=null?key[j]:0.64),0,1);
+    const bend=clamp((0.5*fre+0.25*fim)*PHRASE_BEND[j],-0.6,0.6);
+    const k=slot+sh[j];
+    const ratio=phraseSlotHz(k)/phraseSlotHz(slot);
+    /* music: the chord's interval plus a bend snapped to whole scale steps;
+       tone: the continuous sweep at that interval, bent continuously */
+    v.pitch=music?phraseSlotHz(slot+sh[j]+Math.round(bend*2))
+      :clamp(out.pitch*ratio*Math.pow(2,j?bend:0),55,4000);
+    v.level=clamp(out.level*cov,0,1);
+    v.brightness=clamp(out.brightness*cov,0,1);
+    v.gate=clamp(cov*(feedback?act:1),0,1);
+    v.detune=clamp(PHRASE_TRIM[j]+(feedback?18*fim*PHRASE_BEND[j]:0),-45,45);
+    v.pan=feedback?clamp(fre*PHRASE_PAN_C[j]-fim*PHRASE_PAN_S[j],-0.75,0.75)
+      :clamp(out.pan+PHRASE_PAN[j],-0.75,0.75);
+    v.fmDepth=clamp(cov*(0.06+0.44*(feedback?Math.min(1,Math.abs(fim)*2):0))*
+      (0.5+0.5*out.brightness),0,1);
+  }
+  for(let j=0;j<3;j++){const v=voices[j],w=voices[(j+1)%3];
+    v.fm=v.pitch>1e-9&&w.pitch>1e-9?w.pitch/v.pitch:1;}
   return out;
 }
 </script>
@@ -2872,6 +3070,19 @@ function knock(power){                      /* the whole machine takes it */
   SHV.kick=Math.max(SHV.kick,power);
   SHV.wobP=0;
 }
+/* A physical event on this floor is seen and heard at once, so the shake and
+   the gesture are struck from the same call site: the bench's five gestures are
+   never fired from a timer, only from the machine actually doing something. */
+function knocked(power,gesture,energy){
+  knock(power);
+  if(gesture)hitSound(gesture,energy==null?power:energy);
+}
+/* the lever bottoms out: the platen lands, the mix dips under it, and the
+   sheet exists — the one gesture the shop makes that nothing else can */
+function pullStrike(){
+  knocked(1.5,'platen',1);
+  APP.duckUntil=performance.now()+220;
+}
 function tickKnock(dt){
   SHV.wob*=Math.exp(-7.5*dt);SHV.wobP+=dt*36;
   if(SHV.kick>0){SHV.wob=Math.max(SHV.wob,SHV.kick*2.6);SHV.kick=0;SHV.wobP=0;}
@@ -2901,7 +3112,7 @@ function shopLayout(){
     ducts:{x:W*0.412,y:-H*0.034,w:W*0.340,h:topH*0.70},
     cyl:{x:W*0.752,y:-H*0.055,w:W*0.248,h:topH*0.92},
     upright:{x:bx+side+W*0.030,y:topH*0.92,w:W*0.088,h:H-botH-topH*0.92},
-    camRack:{x:W*0.947,y:H*0.185,w:W*0.056,h:H*0.545},
+    camRack:{x:W*0.947,y:H*0.185,w:W*0.053-Math.max(8,10*s),h:H*0.545},
     wheelCol:{x:W*0.835,y:H*0.215,w:W*0.080,h:H*0.50},
     tape:{x:W*0.128,y:H-14,w:W*0.115},
     delivery:{x:-W*0.045,y:H*0.625,w:W*0.168,h:H*0.375},
@@ -2931,9 +3142,10 @@ function shopLayout(){
   }
   /* the drive side: four cams on a shaft, the law wheels beside them */
   G.cams=[];
+  const cr=Math.max(20,Math.min(W*0.040,H*0.060));
   for(let i=0;i<4;i++)
-    G.cams.push({i:i,x:G.camRack.x,y:G.camRack.y+G.camRack.h*(i+0.5)/4,
-      r:Math.max(20,Math.min(W*0.040,H*0.060))});
+    G.cams.push({i:i,x:W-Math.max(10,14*s)-cr*1.30,
+      y:G.camRack.y+G.camRack.h*(i+0.5)/4,r:cr});
   G.wheels=[];
   return G;
 }
@@ -2946,7 +3158,7 @@ function machineFit(){
   M.duct={x:G.ducts.x,y:H*0.014,w:G.ducts.w,h:Math.max(28,H*0.062)};
   M.cyl={x:W*0.762,y:H*0.020,w:W*0.250,h:Math.max(24,H*0.060)};
   M.cylCap={x:M.cyl.x,y:M.cyl.y+M.cyl.h*0.5,r:M.cyl.h*0.62};
-  M.clamp={x:W*0.780,y:M.cyl.y+M.cyl.h+H*0.004,w:W*0.226,h:Math.max(16,H*0.026)};
+  M.clamp={x:W*0.780,y:M.cyl.y+M.cyl.h+H*0.004,w:W-W*0.780-Math.max(8,10*s),h:Math.max(16,H*0.026)};
   M.imp={x:W*0.752,y:M.cyl.y+M.cyl.h+H*0.052,r:Math.max(16,H*0.030)};
   M.spr={x:G.upright.x+G.upright.w*0.50,y:H*0.355,r:Math.max(12,H*0.022)};
   M.fly={x:W*1.048,y:H*0.848,r:Math.max(40,H*0.118)};
@@ -3053,10 +3265,6 @@ function buildStatic(){
     b.save();b.strokeStyle=inkedHex(BLACK);b.lineWidth=LW*0.8;
     b.stroke(circP(up.x+up.w*0.5,y,3.4*s));b.restore();
   }
-  b.save();b.translate(up.x+up.w*0.50,up.y+up.h*0.64);b.rotate(-Math.PI/2);
-  cut(b,0,0,'GRAB HERE · SHAKE',{size:M.fs,track:1.2,align:'center',
-      col:inkedHex(TC.paper)});
-  b.restore();
 
   /* The shaft and its control wheels share one casting. Cams stay inboard;
      only the housing, never a label or an operable rim, may crop. */
@@ -3437,7 +3645,7 @@ function drawHead(g){
   g.save();g.strokeStyle=inkedHex(TC.black);g.lineWidth=LW;g.stroke(nz);g.restore();
   const vp=rrP(S2.x-S2.r*0.30,S2.y-S2.r*0.2+v*S2.r*1.2,S2.r*0.6,S2.r*0.5,2*s);
   face(g,vp,TC.blue,0.40);
-  cut(g,S2.x,S2.y+S2.r*1.6,String(R.sparkBudget|0)+' pops',{size:Math.max(6.5,7.6*s),
+  cut(g,S2.x,S2.y+S2.r*1.6,String(R.sparkBudget|0)+' POPS',{size:Math.max(6.5,7.6*s),
     align:'center',col:inkedHex(TC.paper)});
   if(SHV.sprayPuff>0){
     g.save();g.globalAlpha=Math.min(0.9,SHV.sprayPuff);
@@ -3451,11 +3659,11 @@ function drawHead(g){
   }
 }
 function shortLab(l){
-  const map={'gap sample space':'FIT','gap neighbour rank':'NEIGHBOUR RANK','coupling':'COUPLING K',
-    'record detune':'DETUNE','energy spread':'SPREAD','record pull':'RECORD PULL','step':'STEP',
-    'terrain gravity':'GRAVITY','topple above (4-card minimum)':'TOPPLE AT','record feed':'RECORD FEED',
-    'loud source columns':'SOURCE COLUMNS','phase steers falls':'PHASE STEERS','feed F':'FEED F',
-    'kill k':'KILL K','diffusion U / V':'DIFFUSION','record modulation':'RECORD MOD.'};
+  const map={'gap sample space':'FIT','gap neighbour rank':'RANK','coupling':'COUPLING',
+    'record detune':'DETUNE','energy spread':'SPREAD','record pull':'PULL','step':'STEP',
+    'terrain gravity':'GRAVITY','topple above (4-card minimum)':'TOPPLE','record feed':'FEED',
+    'loud source columns':'COLUMNS','phase steers falls':'STEERING','feed F':'FEED',
+    'kill k':'KILL','diffusion U / V':'DIFFUSION','record modulation':'MODULATION'};
   return map[l]||l.toUpperCase().slice(0,14);
 }
 function fmt(v){
@@ -3531,9 +3739,9 @@ function drawWheels(g){
   if(!n)return;
   const step=col.h/n, r=Math.min(Math.max(13,20*s),step*0.40);
   for(let i=0;i<n;i++){
-    const p=ps[i], cx=col.x+col.w*0.45, cy=col.y+step*(i+0.5);
+    const p=ps[i], cx=col.x+col.w*0.71, cy=col.y+step*(i+0.5);
     const labelSize=Math.max(6.5,8.4*s);
-    cut(g,cx,cy-r-Math.max(7,9*s),fit(g,shortLab(p.label),labelSize,col.w-8*s),
+    cut(g,cx,cy-r-Math.max(7,9*s),fit(g,shortLab(p.label),labelSize,Math.max(56,col.w*0.58)),
       {size:labelSize,align:'center',col:inkedHex(TC.paper)});
     if(p.options){
       const on=p.value===p.options[1].value;
@@ -3549,7 +3757,7 @@ function drawWheels(g){
       continue;
     }
     const t=(p.value-p.min)/(p.max-p.min||1);
-    part(g,circP(cx,cy,r),TC.mid,0.20,{gap:1.6*s,lw:LW});
+    part(g,circP(cx,cy,r),TC.light,0.34,{gap:1.6*s,lw:LW});
     hatch(g,circP(cx,cy,r),cx-r,cy-r,r*2,r*2,60,Math.max(2,2.6*s),
           Math.max(0.6,0.8*s),TC.black,0.42);
     g.save();
@@ -3660,13 +3868,13 @@ function drawThrottle(g){
   const kn=circP(x,T.y-H,Math.max(9,11.5*s));
   face(g,kn,TC.red,0.40);shadow(g,kn,0.30,45);
   g.save();g.strokeStyle=inkedHex(TC.black);g.lineWidth=LW;g.stroke(kn);g.restore();
-  const tagX=T.x-8*s, tagY=T.y-H-34*s, tagW=T.travel+16*s;
+  const tagW=T.travel+16*s, tagX=x-tagW/2, tagY=T.y-H-34*s;
   const tag=rrP(tagX,tagY,tagW,22*s,1.5*s);
   face(g,tag,TC.paper,0.08);
-  line(g,x,tagY+22*s,x,T.y-H-10*s,TC.paper,LW,1);
+  line(g,x,tagY+22*s,x,T.y-H-Math.max(9,11.5*s),TC.paper,LW,1);
   cut(g,tagX+tagW/2,tagY+9*s,'PRESS SPEED',{size:Math.max(6.5,7.2*s),
     align:'center',col:inkedHex(TC.black)});
-  cut(g,tagX+tagW/2,tagY+18*s,Math.round(v)+' gen/s',{size:Math.max(7,8*s),
+  cut(g,tagX+tagW/2,tagY+18*s,Math.round(v)+' GEN/s',{size:Math.max(7,8*s),
     align:'center',bold:true,col:inkedHex(TC.black)});
   if(SHV.thrHi){
     g.save();g.strokeStyle=inkedHex(TC.paper);g.lineWidth=LW*1.5;
@@ -3767,8 +3975,8 @@ function leverTag(){
    dialog. The picker behind the file input is opened by a physical hotspot on
    the board, and the input itself is never seen. */
 function stockList(){
-  const out=[{id:'gsfc',label:'GSFC QC6 STRAIN',kind:'house'},
-             {id:'noise',label:'SEEDED NOISE',kind:'house'}];
+  const out=[{id:'gsfc',label:'GSFC STRAIN',kind:'house'},
+             {id:'noise',label:'HOUSE NOISE',kind:'house'}];
   const f=(typeof APP!=='undefined')?APP.file:null;
   if(f)out.push({id:'file',label:(f.name||'DROPPED FILE').toUpperCase().slice(0,22),kind:f.kind,
                  file:f,thumb:SHV.thumb});
@@ -3886,11 +4094,8 @@ function drawDelivery(g){
     /* The delivery bay is a dark casting, so this line is KNOCKED OUT of it —
        pale ink on the dark, never dark ink on dark, which is what made it
        unreadable. */
-    const lines=wrap(g,'nothing pulled yet — make the press ready, then haul the lever',
-      Math.max(6.5,7.4*s),vw*0.9);
-    for(let i=0;i<lines.length;i++)
-      cut(g,vcx,D.y+D.h*0.42+i*Math.max(9,10.5*s),lines[i],
-        {size:Math.max(6.5,7.4*s),align:'center',col:inkedHex(TC.wash)});
+    cut(g,vcx,D.y+D.h*0.42,'NOTHING PULLED YET · HAUL THE LEVER',
+      {size:Math.max(6.5,7.4*s),align:'center',col:inkedHex(TC.wash)});
   }
   const k=pile.length;
   cut(g,vcx,D.y-4*s,k?(k+(k===1?' SHEET':' SHEETS')):'',{size:Math.max(6.5,7.6*s),
@@ -3978,7 +4183,7 @@ function drawPaperwork(g){
   miniRecord(g,pc.x+4,pc.y+4,pc.w-8,72*s,rec);
   const capS=Math.max(6.4,7.2*s), capW=pc.w-12;
   cut(g,pc.x+6,pc.y+72*s+Math.max(12,14*s),
-    fit(g,'COMMISSION — '+((rec&&rec.name)?rec.name.toUpperCase():'—'),capS,capW),
+    fit(g,'COMMISSION · '+((rec&&rec.name)?rec.name.toUpperCase():'—'),capS,capW),
     {size:capS,col:inkedHex(TC.black)});
   /* the plate proof: what the field will print */
   const fy=pc.y+72*s+Math.max(24,28*s);
@@ -3990,7 +4195,7 @@ function drawPaperwork(g){
   g.restore();
   g.save();g.strokeStyle=inkedHex(TC.deep);g.lineWidth=Math.max(0.8,1*s);g.stroke(box);g.restore();
   cut(g,pc.x+6,fy+72*s+Math.max(12,14*s),
-    fit(g,'PLATE PROOF — '+(((typeof APP!=='undefined')&&APP.field)?APP.field.label:'—'),capS,capW),
+    fit(g,'PLATE PROOF · '+(((typeof APP!=='undefined')&&APP.field)?APP.field.label:'—'),capS,capW),
     {size:capS,col:inkedHex(TC.black)});
   /* the job ticket: the whole state of the shop as one document you can read */
   const ty=fy+72*s+Math.max(24,28*s);
@@ -3999,27 +4204,23 @@ function drawPaperwork(g){
   g.save();g.strokeStyle=inkedHex(TC.black);g.lineWidth=LW;g.stroke(tk);g.restore();
   const A=(typeof APP!=='undefined')?APP:null,SH=(typeof SHOP!=='undefined')?SHOP:null;
   const st=SH?SH.state:'makeready';
-  const stateW={makeready:'MAKING READY',proof:'PROOF ON THE TABLE',run:'EDITION RUNNING',
+  const stateW={makeready:'MAKEREADY',proof:'PROOF PULLED',run:'EDITION RUNNING',
                 done:'DELIVERED'}[st]||'—';
   const rows=[
-    ['JOB','№ '+String(SH?SH.job:1).padStart(3,'0')],
     ['COMMISSION',(A&&A.rec&&A.rec.name)?A.rec.name:'—'],
     ['PLATE',(A&&A.field)?A.field.label:'—'],
     ['LAW',(A&&A.world)?A.world.label:'—'],
-    ['IMPRESSION',Mimp()+'×'+Mimp()+' CARDS'],
     ['EDITION',st==='run'||st==='done'
       ?(SH?Math.min(SH.n-1,SH.N):0)+' OF '+(SH?SH.N:8)+' OUT'
       :(SH?SH.N:8)+' SHEETS ORDERED'],
-    ['INK KEYS',[0,1,2].map(i=>Math.round((SHV.key[i]||0)*100)).join('/')],
-    ['REGISTER',regErr()<0.30?'DEAD ON':regErr().toFixed(2)+' PX OUT'],
     ['STATE',stateW]
   ];
   let ry=ty+Math.max(13,15.5*s);
-  cut(g,pc.x+8,ry,'JOB TICKET',{size:Math.max(7,8.2*s),track:2.0,bold:true,col:inkedHex(TC.black)});
-  cut(g,pc.x+pc.w-10,ry,rows[0][1],{size:Math.max(8,9.6*s),align:'right',bold:true,col:inkedHex(TC.black)});
+  cut(g,pc.x+8,ry,'JOB TICKET · № '+String(SH?SH.job:1).padStart(3,'0'),
+    {size:Math.max(7,8.2*s),track:2.0,bold:true,col:inkedHex(TC.black)});
   line(g,pc.x+8,ry+3*s,pc.x+pc.w-10,ry+3*s,TC.black,Math.max(0.9,1.1*s),0.9);
   ry+=Math.max(11,13*s);
-  for(let i=1;i<rows.length;i++){
+  for(let i=0;i<rows.length;i++){
     /* label left, value right, and the value gets whatever the label leaves.
        A long commission name is shortened by the compositor rather than
        reversing into the label, which is what produced "COMMGSFC_QC6…". */
@@ -4031,12 +4232,6 @@ function drawPaperwork(g){
     line(g,lx,ry+2.4*s,rx,ry+2.4*s,TC.pale,1,0.9);
     ry+=Math.max(11,13*s);
   }
-  /* the law's measured note, wrapped into the ticket's foot: this is the one
-     place the numbers live, and it is paper */
-  const note=(A&&A.world)?((WORLD_NOTE||{})[A.world.id]||A.world.blurb||''):'';
-  ry+=Math.max(3,4*s);
-  line(g,pc.x+8,ry-2*s,pc.x+pc.w-10,ry-2*s,TC.black,Math.max(0.9,1.1*s),0.9);
-  para(g,note.slice(0,300),pc.x+8,ry+size,size*0.94,pc.w-20,size*1.28,{col:inkedHex(TC.deep)});
   /* the drawer: the full paperwork, pulled out when you want it */
   const drY=ty+Math.max(150,186*s)+Math.max(6,8*s);
   const tab=rrP(pc.x+2,drY,pc.w-4,Math.max(20,24*s),2*s);
@@ -4065,7 +4260,7 @@ function drawPaperwork(g){
   }
   g.restore();
   g.save();g.strokeStyle=inkedHex(TC.deep);g.lineWidth=Math.max(0.8,1*s);g.stroke(pb);g.restore();
-  cut(g,pc.x+8,py+Math.max(11,13.5*s),'THE BOARD, LIVE',
+  cut(g,pc.x+8,py+Math.max(11,13.5*s),'THE BOARD · LIVE',
     {size:Math.max(6.2,7*s),col:inkedHex(TC.black)});
 }
 /* ── §19 · the counter window: the machine's own instrumentation ─────────── */
@@ -4123,7 +4318,7 @@ function drawLoupe(g){
   cut(g,cx,cy+side/2+Math.max(14,17*s),line,{size:Math.max(7.4,9*s),align:'center',
     bold:true,col:inkedHex(TC.black)});
   cut(g,cx,cy+side/2+Math.max(24,29*s),
-    'PULL '+p.seed+' · GEN '+p.gen+' · REG '+p.reg.toFixed(2)+' PX  ·  CLICK TO PUT IT BACK',
+    'PULL '+p.seed+' · GEN '+p.gen+' · REG '+p.reg.toFixed(2)+' PX · CLICK TO RETURN',
     {size:Math.max(6.4,7.4*s),align:'center',col:inkedHex(TC.mid)});
   g.save();g.strokeStyle=inkedHex(TC.mid);g.lineWidth=LW;
   g.strokeRect(cx-side/2-6,cy-side/2-6,side+12,side+12);g.restore();
@@ -4162,9 +4357,9 @@ function drawDrawer(g){
       (rec.amax!=null?', |h| up to '+rec.amax.toFixed(3):'')):'—');
   block('HOW IT BECAME A RECORD',(A&&A.wmeta)?waveTxt(A.wmeta):'');
   block('THE PLATE ON THE CYLINDER',
-    (A&&A.field?(((A.field.label)+' — '+(A.field.note||'')+' '+(A.field.blurb||''))):''));
+    (A&&A.field?(((A.field.label)+' — '+(A.field.blurb||''))):''));
   if(A&&A.world)block('THE LAW WORKING THE INK',
-    A.world.label+' — '+(A.world.blurb||'')+' '+((WORLD_NOTE||{})[A.world.id]||''));
+    A.world.label+' — '+(A.world.blurb||''));
   g.restore();
 }
 function waveTxt(m){
@@ -4222,7 +4417,7 @@ function drawWallPlates(g){
   const foot=ps.length?ps[0].y+ps[0].h+Math.max(12,15*s):G.wall.h*0.62;
   const isz=Math.max(6.8,7.8*s);
   cut(g,G.wall.x+8*s,foot,
-    fit(g,'SPARE PLATES  ·  BACK WALL  —  REACH UP AND SWAP ONE',isz,G.wall.w-16*s),
+    fit(g,'SPARE PLATES · REACH UP',isz,G.wall.w-16*s),
     {size:isz,track:1.1,bold:true,col:inkedHex(TC.black)});
 }
 /* ── §23 · what is in the hand ──────────────────────────────────────────────
@@ -4361,9 +4556,9 @@ function shopDown(x,y){
   else if(hit.kind==='key'){st.i=hit.i;st.v0=T.key[hit.i];
     st.sy=M.duct.y+M.duct.h-3*s0();st.travel=Math.max(20,26*s0());}
   else if(hit.kind==='cam'){st.i=hit.i;st.x0v=(camState()[hit.i].x===undefined?1:camState()[hit.i].x);}
-  else if(hit.kind==='wheel'){st.i=hit.i;st.v0=wheelVal(hit.i);
+  else if(hit.kind==='wheel'){st.i=hit.i;st.v0=wheelVal(hit.i);st.tick=NaN;
     st.span=Math.max(46,G.wheelCol.h*0.30);}
-  else if(hit.kind==='head'){st.i=hit.i;st.v0=headVal(hit.i);st.span=Math.max(40,60*G.s);}
+  else if(hit.kind==='head'){st.i=hit.i;st.v0=headVal(hit.i);st.tick=NaN;st.span=Math.max(40,60*G.s);}
   else if(hit.kind==='lev'){st.v0=T.lev||0;killSp(T);}
   else if(hit.kind==='sheet'){st.h=hit.h;}
   else if(hit.kind==='stock'){const o=hit.obj;killSp(o);
@@ -4382,7 +4577,8 @@ function shopDown(x,y){
     T.grabIt=hit.it;T.grabIt._hit=hit.it;}
   else if(hit.kind==='plate'){st.p=hit.p;
     T.grab={carry:true,kind:'plate',x:x,y:y,w:hit.p.w*1.15,h:hit.p.h*1.15,
-      label:hit.p.label,grip:'CLAMP IT ON THE CYLINDER'};T.drag=null;T.grabIt=hit.p;}
+      label:hit.p.label,grip:'CLAMP IT ON THE CYLINDER'};T.drag=null;T.grabIt=hit.p;
+    hitSound('snap',0.2);}
   else if(hit.kind==='frame'||hit.kind==='none'||hit.kind==='grip'){
     T.drag=null;
     T.shake={x:x,y:y,dir:0,rev:0,travel:0};
@@ -4419,6 +4615,12 @@ function shopMove(x,y){
   }
   d.x=x;d.y=y;d.moved=Math.max(d.moved,Math.hypot(x-d.x0,y-d.y0));
   const dx=x-d.x0, dy=y-d.y0;
+  /* a knurled dial is a detent, not a slide: it clicks once per step of travel,
+     and the tappet wheels and the head dials click from this one place */
+  const dialTick=(k,v,lo,hi)=>{
+    const tick=Math.round((v-lo)/(hi-lo||1)*24);
+    if(tick!==k.tick){k.tick=tick;hitSound('snap',0.12);}
+  };
   switch(d.kind){
     case 'pin':{
       const p=d.p, hx=p.hx, hy=p.hy;
@@ -4428,10 +4630,10 @@ function shopMove(x,y){
       if(Math.hypot(nx,ny)<p.rad*0.11){nx=0;ny=0;}
       p.x=hx+nx;p.y=hy+ny;
       if(nx===0&&ny===0&&!p.wasHome){
-        p.wasHome=1;p.flash=1;knock(0.25);
+        p.wasHome=1;p.flash=1;knocked(0.25,'snap');
         say(p.name+' PLATE IN REGISTER',TC.teal);
         if(SHV.pins.every(q=>pinResidual(q)<0.02))
-          say('ALL THREE PLATES HOME · THE SHEET IS DEAD ON',TC.teal);
+          say('THREE PINS HOME · DEAD ON',TC.teal);
       }else if(nx!==0||ny!==0)p.wasHome=0;
       break;
     }
@@ -4455,6 +4657,7 @@ function shopMove(x,y){
       let v=d.v0-dy/d.span*(p.max-p.min);
       if(p.step){v=Math.round(v/p.step)*p.step;}
       v=clamp(v,p.min,p.max);
+      dialTick(d,v,p.min,p.max);
       API.setWorldParam(p.key,v);
       break;
     }
@@ -4469,6 +4672,7 @@ function shopMove(x,y){
       }
       let v=d.v0-dy/d.span*(p.max-p.min);
       if(p.step){v=Math.round(v/p.step)*p.step;}
+      dialTick(d,v,p.min,p.max);
       API.setFieldParam(p.key,clamp(v,p.min,p.max));
       break;
     }
@@ -4538,12 +4742,12 @@ function shopUp(x,y){
       if(inGrip){
         if(it.id==='file'&&it.file)API.loadStock(it.file);
         else API.setSource(it.id);
-        knock(0.35);say('STOCK INTO THE GRIPPERS · '+it.label,TC.teal);
+        knock(0.35);hitSound('sheet',0.5);say('STOCK INTO THE GRIPPERS · '+it.label,TC.teal);
       }
     }else if(T.grab.kind==='stock'){
       if(inGrip){
         if(obj.file)API.loadStock(obj.file);
-        knock(0.35);
+        knocked(0.35,'sheet',0.45);
         const k=SHV.stock.indexOf(obj);if(k>=0)SHV.stock.splice(k,1);
       }else{
         sp(obj,'x',obj.slotX,70,22);sp(obj,'y',obj.slotY,70,22);
@@ -4552,7 +4756,7 @@ function shopUp(x,y){
       const G=SHV.G,M=SHV.M,p=it;
       const onCyl=y<G.H*0.235&&x>G.W*0.52;
       if(onCyl){
-        knock(0.55);
+        knocked(0.55,'ink');
         API.setField(p.id);
         say('PLATE CLAMPED · '+p.label,TC.teal);
       }
@@ -4577,6 +4781,7 @@ function shopUp(x,y){
       if(c.x>0.5){
         const list=API.worlds(), w=list[d.i];
         if(w&&w.id!==APP.wrldId){
+          knocked(0.35,'snap');
           say('CAM ON THE SHAFT · '+w.label,TC.black);
           API.setWorld(w.id);
         }
@@ -4587,7 +4792,7 @@ function shopUp(x,y){
       const t=T.lev||0;
       if(t>0.62){
         T.lev=1;
-        knock(1.5);
+        pullStrike();
         API.pull();
         SHV.fireAt=performance.now()+140;
       }else{
@@ -4616,7 +4821,7 @@ function shopUp(x,y){
       const inside=x>SHV.G.delivery.x-60&&x<SHV.G.delivery.x+SHV.G.delivery.w+90&&
                    y>SHV.G.delivery.y-70&&y<SHV.G.H+20;
       if(quick)T.loupe=h.p;
-      else if(!inside){API.discard(h.i);say('SHEET BINNED',TC.pink);}
+      else if(!inside){API.discard(h.i);hitSound('sheet',0.3);say('SHEET BINNED',TC.pink);}
       break;
     }
     case 'buy':{
@@ -4675,6 +4880,7 @@ function shopTick(dt){
   T.pileT=Math.max(0,(T.pileT||0)-dt*2.2);
 }
 function say(txt,tone){
+  hitSound('tape',0.5);
   SHV.tape.push({txt:String(txt),t:SHV.t||0,tone:tone});
   while(SHV.tape.length>5)SHV.tape.shift();
 }
@@ -4872,7 +5078,7 @@ const SHOPVIEW={
       if(e.key==='Escape'){SHV.loupe=null;sp(SHV,'paper',0,120,20);}
       else if(e.code==='Space'&&e.target===document.body){
         e.preventDefault();
-        if(SHV.lev<0.62){SHV.lev=1;knock(1.5);API.pull();SHV.fireAt=performance.now()+140;}
+        if(SHV.lev<0.62){SHV.lev=1;pullStrike();API.pull();SHV.fireAt=performance.now()+140;}
       }
     });
     /* a phone is shaken, not grabbed: the same power mapping, the same rules */
@@ -4883,7 +5089,7 @@ const SHOPVIEW={
       if(!A.mean)A.mean=m;
       A.mean=A.mean*0.92+m*0.08;
       const dev=Math.abs(m-A.mean),now=performance.now();
-      if(dev>4.5&&now-A.last>700){A.last=now;knock(0.7);API.shake(clamp((dev-4.5)/12,0.15,1));}
+      if(dev>4.5&&now-A.last>700){A.last=now;knocked(0.7,'platen',clamp((dev-4.5)/12,0.15,1));API.shake(clamp((dev-4.5)/12,0.15,1));}
     });
     window.addEventListener('dragstart',e=>e.preventDefault());
     window.addEventListener('dragover',e=>{
@@ -4898,8 +5104,8 @@ const SHOPVIEW={
       const raw=at(e),[x,y]=onPress(raw[0],raw[1]);
       SHOPVIEW.dropFiles(e.dataTransfer.files,x,y);
     });
-    say('JOB 001 ON THE COUNTER · THE PLATES ARE OFF REGISTER — BRING THE PINS HOME',TC.pink);
-    say('DROP ANY FILE ANYWHERE: IT LANDS ON THE FEED BOARD AS STOCK',TC.black);
+    say('JOB 001 · BRING THE THREE PINS HOME',TC.pink);
+    say('DROP A FILE ON THE FEED BOARD',TC.black);
   },
   /* the app asks for the pitch of the three plates before it prints */
   slip(){return slipArr();},
@@ -4928,7 +5134,7 @@ const SHOPVIEW={
       if(/^image\//.test(f.type))createImageBitmap(f).then(b=>{SHV.thumb=b;}).catch(()=>{});
     }
   },
-  deliver(kind){SHV.pileT=1;},
+  deliver(kind){SHV.pileT=1;if(kind!=='void')hitSound('delivery',0.7);},
   openPicker(){openPicker();},
   pick(x,y){return shopPick(x,y).kind;},
   lens:function(){return SHV.lens;},
@@ -5083,11 +5289,11 @@ const ROOMVIEW=(()=>{
       box(g,.05,.45,.58,3.9,z,.07,C.paper);
       for(let n=0;n<10;n++)can(g,.29,.63+n*.36,z+.07,[C.blue,C.coral,C.sun,C.teal][n%4],.24+(n%3)*.05,.11);
     }
-    plaque(g,'INK LIBRARY',.3,2.2,2.85,83,'ink:label');
+    plaque(g,'THE INK LIBRARY',.3,2.2,2.85,83,'ink:label');
     region('ink:shelf',wall('left',.45,4.35,1.65,2.85));
     table(g,.2,4.8,1.2,1.3,.9,C.sun);
     for(let n=0;n<8;n++)poly(g,tile(.25+n%2*.025,4.95,1,.85,1.03+n*.018),C.paper);
-    plaque(g,'BRING A FILE',.8,5.4,1.65,82,'stock:label');
+    plaque(g,'THE LIGHT TABLE',.8,5.4,1.65,82,'stock:label');
     region('stock:paper',tile(.25,4.95,1,.85,1.2));
     // Listening bench. Its screen and speakers are drawn live above this.
     table(g,8.5,.6,3.0,1.5,.97,C.coral);
@@ -5114,7 +5320,7 @@ const ROOMVIEW=(()=>{
     table(g,4.05,6.45,3.65,1.65,.70,C.blue);
     for(let n=0;n<5;n++)poly(g,tile(4.27,6.58,3.12,1.3,.84+n*.013),C.paper);
     region('press:delivery',tile(4.05,6.45,3.65,1.65,.84));
-    plaque(g,'STEP TO THE PRESS',6.1,7.6,.15,119,'press:label');
+    plaque(g,'THE PRESS',6.1,7.6,.15,119,'press:label');
     for(let n=0;n<3;n++)can(g,8.15+n*.55,3.7,0,[C.blue,C.coral,C.sun][n],.55,.20);
     // Small useful mess: offcuts, a wash bucket, apron, stool and fern.
     for(let k=0;k<9;k++){
@@ -5193,8 +5399,8 @@ const ROOMVIEW=(()=>{
     g.fillStyle=inkedHex(C.blue);g.fillRect(0,0,700,400);
     for(let x=24;x<686;x+=33)line(g,[[x,24],[x,366]],[.7,.35,.15],.55);
     for(let y=30;y<365;y+=28)line(g,[[24,y],[680,y]],[.7,.35,.15],.55);
-    text(g,APP.feedback?'01  Re: source + LIFE':'01  Re(h)',30,23,12,C.sun);
-    text(g,APP.feedback?'02  Im: source + LIFE':'02  Im(h)',248,23,12,C.coral);
+    text(g,APP.feedback?'01  Re · SOURCE + LIFE':'01  Re(h)',30,23,12,C.sun);
+    text(g,APP.feedback?'02  Im · SOURCE + LIFE':'02  Im(h)',248,23,12,C.coral);
     text(g,'03  '+(APP.wrldId==='synch'?'ORDER r':'OCCUPANCY'),444,23,12,C.paper);
     if(!rec||!rec.re||scan<0)return;
     const n=rec.re.length,span=Math.min(n-1,Math.max(72,Math.round(n*.32))),start=clamp(scan-Math.round(span*.58),0,n-1-span),end=start+span;
@@ -5206,7 +5412,7 @@ const ROOMVIEW=(()=>{
       const pts=[];for(let i=start;i<=end;i++)pts.push([sx(i),cy-a[i]/amp*38*R.gain]);
       line(g,pts,c,2);line(g,[[sx(scan),cy-45],[sx(scan),cy+45]],C.paper,.9);
       disc(g,sx(scan),cy-a[scan]/amp*38*R.gain,2,c);g.restore();
-      if(APP.feedback)text(g,'source is faint · '+APP.feedback.live+' live cells',29,cy+55,9,C.paper);
+      if(APP.feedback)text(g,'SOURCE IS FAINT · '+APP.feedback.live+' LIVE CELLS',29,cy+55,9,C.paper);
     }
     const count=Math.min(APP.scopeN,APP.scopeHist.length);let lo=1,hi=0;
     for(let k=0;k<count;k++){const v=APP.scopeHist[(APP.scopeN-count+k)%APP.scopeHist.length];lo=Math.min(lo,v);hi=Math.max(hi,v);}
@@ -5218,6 +5424,55 @@ const ROOMVIEW=(()=>{
     const ti=rec.t?rec.t[scan]:scan;
     text(g,'SAMPLE '+scan+' / '+(n-1)+'     t '+Number(ti).toFixed(3)+'     GAIN '+R.gain.toFixed(2)+'x',29,391,11,C.paper);
   }
+  /* THE ROLL — the room's own tune, punched. The holes are the arrangement
+     itself (THEME.SCORE: sixteen bars of eight half-beats, one lane per
+     artifact), so the roll is a score and not a decoration, and the lead is a
+     continuous slot because the record writes that line live. The section names
+     sit above the tape and the readout below it: nothing inside the tape but
+     the punches and the playhead. */
+  function roll(g,x,y,w,h){
+    const BARS=THEME.BARS,U=BARS*8,cell=w/U;
+    /* the four sections, named at their own divider, above the tape */
+    for(let b=0;b<BARS;b++){
+      if(THEME.SECTION[b]===(b?THEME.SECTION[b-1]:-1))continue;
+      const dx=x+b*8*cell;
+      if(dx>6){text(g,THEME.FORM[THEME.SECTION[b]].name,dx+3,y-5,9.5,C.coral);}
+    }
+    text(g,'LEAD · THE RECORD SINGS',x+w,y-5,9,C.blue,'right');
+    poly(g,[[x,y],[x+w,y],[x+w,y+h],[x,y+h]],C.blue,.10);
+    const rail=Math.max(5,h*.10),holes=Math.max(1,Math.min(3.4,(h-2*rail-4)/8*.34));
+    /* the sprocket rails, top and bottom: the tape is driven by its edges */
+    for(const ry of [y+rail*.5,y+h-rail*.5]){
+      line(g,[[x,ry],[x+w,ry]],C.blue,.7);
+      for(let k=0;k<U;k++)disc(g,x+(k+.5)*cell,ry,Math.min(1.3,cell*.22),C.blue);
+    }
+    /* the punched lanes, in floor order: the machine first, the wall last */
+    const lanes=['platen','sheet','pins','ink','harmony','delivery','tape','wall'];
+    const top=y+rail+2,bot=y+h-rail-2,step=(bot-top)/lanes.length;
+    for(let u=0;u<U;u++){
+      const bit=THEME.SCORE[u]||0;
+      if(!bit)continue;
+      for(let k=0;k<lanes.length;k++){
+        if(!(bit&THEME.HIT[lanes[k]]))continue;
+        disc(g,x+(u+.5)*cell,top+step*(k+.5),holes,C.blue);
+      }
+    }
+    /* the lead: one continuous punched slot, and the bar lines run past it */
+    line(g,[[x+1,y+rail+step*.5],[x+w-1,y+rail+step*.5]],C.coral,Math.max(1.6,step*.30));
+    for(let b=1;b<BARS;b++)line(g,[[x+b*8*cell,top-2],[x+b*8*cell,bot+2]],
+      THEME.SECTION[b]===THEME.SECTION[b-1]?C.blue:C.coral,.8);
+    /* the playhead, and the tune's readout under the tape */
+    const rep=AUDIO.theme&&AUDIO.theme.report();
+    if(AUDIO.themeOn&&rep&&rep.bar>=0){
+      const px=x+(rep.bar*8+rep.unit)*cell;
+      line(g,[[px,top-3],[px,bot+3]],C.teal,1.8);
+      poly(g,[[px-4,top-4],[px+4,top-4],[px,top+3]],C.teal,.9,false);
+      text(g,'BAR '+(rep.bar+1)+'/'+BARS+' · '+rep.sectionName+' · '+Math.round(rep.bpm)+
+        ' BPM · TONIC '+rep.tonic.toFixed(1)+' Hz',x,y+h+16,10,C.teal);
+    }else{
+      text(g,'THE ROLL IS PARKED · TURN THE ROLL KNOB',x,y+h+16,10,C.blue);
+    }
+  }
   function knob(g,id,label,x,y,r,t,readout,collector=Q.knobs){
     collector.push({id,x,y,r});poly(g,ellipse(x,y,r+5,r+5),C.blue,.3);
     disc(g,x,y,r,C.paper);for(let n=0;n<11;n++){const a=-Math.PI*.75+n/10*Math.PI*1.5;line(g,[[x+Math.cos(a)*(r-2),y+Math.sin(a)*(r-2)],[x+Math.cos(a)*(r-6),y+Math.sin(a)*(r-6)]],C.blue,.8);}
@@ -5225,23 +5480,33 @@ const ROOMVIEW=(()=>{
     disc(g,x,y,3,C.blue);text(g,label,x,y-r-16,11,C.paper,'center');text(g,readout,x,y+r+23,11,C.paper,'center');
   }
   function instrument(g){
-    const W=Q.W,H=Q.H,s=Math.min((W-42)/1020,(H-100)/740),x=(W-960*s)/2,y=(H-680*s)/2;
+    /* The bench reads top to bottom like the instrument it is: the roll the
+       room plays, the scope of what the record is doing while it plays, then
+       the operator's row of dials. One row of eight because the top row is what
+       the sound IS (power, phase law, the room, the ink) and the bottom row is
+       how it is read (gain, sweep, loudness) or written (the roll) — and a
+       bench that fits on a desk beats two rows that do not. */
+    const W=Q.W,H=Q.H,s=Math.min((W-42)/1020,(H-100)/920),x=(W-960*s)/2,y=(H-865*s)/2;
     Q.knobs=[];g.save();g.translate(x,y);g.scale(s,s);
-    poly(g,[[0,25],[40,0],[960,0],[960,645],[0,680]],C.teal,.7);
-    poly(g,[[0,25],[920,25],[920,680],[0,680]],C.blue,.8);
-    for(const [a,b] of [[16,42],[903,42],[16,661],[903,661]]){disc(g,a,b,4,C.paper);line(g,[[a-2,b],[a+2,b]],C.blue,.8);}
+    poly(g,[[0,25],[40,0],[960,0],[960,830],[0,865]],C.teal,.7);
+    poly(g,[[0,25],[920,25],[920,865],[0,865]],C.blue,.8);
+    for(const [a,b] of [[16,42],[903,42],[16,846],[903,846]]){disc(g,a,b,4,C.paper);line(g,[[a-2,b],[a+2,b]],C.blue,.8);}
     text(g,'THE LISTENING BENCH',40,64,17,C.paper);
-    text(g,'ANALYTIC RECORD / WORLD RESPONSE',880,64,11,C.paper,'right');
-    poly(g,[[37,85],[882,85],[882,490],[37,490]],C.paper);g.drawImage(Q.scope,45,93,828,388);
+    if(typeof THEME!=='undefined'&&THEME.SCORE)roll(g,45,102,828,116);
+    poly(g,[[37,250],[882,250],[882,650],[37,650]],C.paper);g.drawImage(Q.scope,45,258,828,388);
     const defs=[['sound','POWER',AUDIO.enabled?1:0,AUDIO.enabled?'SOUND ON':'SILENT'],
       ['mode','PHASE',AUDIO.mode==='music'?1:0,AUDIO.mode==='music'?'PENTATONIC':'CONTINUOUS'],
-      ['gain','DISPLAY GAIN',(R.gain-.25)/3.75,R.gain.toFixed(2)+'x'],
-      ['offset','SWEEP OFFSET',APP.scopeOffset/100,APP.scopeOffset.toFixed(0)+'%'],
-      ['volume','LOUDNESS',AUDIO.volume,Math.round(AUDIO.volume*100)+'%']];
-    defs.forEach((d,k)=>knob(g,d[0],d[1],112+k*173,565,29,d[2],d[3]));
-    text(g,'Amplitude → loudness. Phase rotation → pitch. Complex phase → stereo.',460,646,11,C.paper,'center');
+      ['space','ROOM',AUDIO.space,Math.round(AUDIO.space*100)+'%'],
+      ['character','DIRT',AUDIO.character,Math.round(AUDIO.character*100)+'%'],
+      ['gain','GAIN',(R.gain-.25)/3.75,R.gain.toFixed(2)+'x'],
+      ['offset','SWEEP',APP.scopeOffset/100,APP.scopeOffset.toFixed(0)+'%'],
+      ['volume','VOLUME',AUDIO.volume,Math.round(AUDIO.volume*100)+'%'],
+      ['theme','THE ROLL',AUDIO.themeOn?1:0,AUDIO.themeOn?'PLAYING':'PARKED']];
+    defs.forEach((d,k)=>knob(g,d[0],d[1],95+k*110,710,26,d[2],d[3]));
+    text(g,'AMPLITUDE → LOUDNESS · PHASE → PITCH · STEREO',460,792,11,C.paper,'center');
+    text(g,'THREE PLATES · THREE VOICES',460,810,11,C.paper,'center');
     g.restore();Q.knobs.forEach(k=>{k.x=x+k.x*s;k.y=y+k.y*s;k.r*=s;});
-    text(g,Q.note||'Intentional sonification — not a recording of a sound in space.',W/2,H-23,Math.min(12,W/66),C.blue,'center');
+    text(g,Q.note||'THE RECORD PLAYED · NOT A RECORDING',W/2,H-23,Math.min(12,W/66),C.blue,'center');
     back(g);
   }
   function back(g){
@@ -5275,7 +5540,7 @@ const ROOMVIEW=(()=>{
     Q.art.getContext('2d').drawImage(document.getElementById('stage'),0,0,px,px,0,0,px,px);
     ctx.fillStyle=inkedHex(C.paper);ctx.fillRect(0,0,Q.W,Q.H);
     if(Q.mode==='ink'){Object.assign(Q,INK_STATION.paint(ctx,Q.W,Q.H,Q.art));stationNote(ctx);back(ctx);return;}
-    text(ctx,'a record, a room, a small world.',Q.W/2,42,Math.min(17,Q.W/27),C.blue,'center');
+    text(ctx,'A RECORD · A ROOM · A SMALL WORLD',Q.W/2,42,Math.min(17,Q.W/27),C.blue,'center');
     text(ctx,'THE PRESS TAKES COMMISSIONS',Q.W/2,64,Math.min(10,Q.W/42),C.coral,'center');
     ctx.save();ctx.translate(Q.ox,Q.oy);ctx.scale(Q.scale,Q.scale);
     ctx.drawImage(Q.backdrop,-380,-140,800,560);
@@ -5299,8 +5564,8 @@ const ROOMVIEW=(()=>{
     }
     ctx.restore();
     const small=Math.min(11,Q.W/59);
-    text(ctx,'Click the press to work · click the bench to listen · drag to wander · scroll to look closer',Q.W/2,Q.H-40,small,C.blue,'center');
-    text(ctx,(APP.rec?.name||'record')+'  /  '+(APP.world?.label||'')+'  /  '+SHOP.pulled.length+' sheets delivered',Q.W/2,Q.H-20,Math.min(10,Q.W/76),C.blue,'center');
+    text(ctx,'CLICK A STATION · DRAG TO WANDER · SCROLL IN',Q.W/2,Q.H-40,small,C.blue,'center');
+    text(ctx,(APP.rec?.name||'RECORD').toUpperCase()+' · '+(APP.world?.label||'')+' · '+SHOP.pulled.length+' SHEETS DELIVERED',Q.W/2,Q.H-20,Math.min(10,Q.W/76),C.blue,'center');
   }
   function stationNote(g){if(Q.note)text(g,Q.note,Q.W/2,Q.H-19,Math.min(11,Q.W/95),C.blue,'center');}
   function enter(mode){Q.previous=Q.mode;Q.mode=mode;Q.frame=-1;Q.drag=null;Q.hover='';Q.note='';Q.actions=[];Q.knobs=[];SHV.drag=null;SHV.shake=null;SHV.grab=null;paint();}
@@ -5309,14 +5574,19 @@ const ROOMVIEW=(()=>{
     if(id==='gain')R.gain=Math.round((.25+v*3.75)*20)/20;
     if(id==='offset')APP.scopeOffset=Math.round(v*100);
     if(id==='volume')AUDIO.volume=v;
+    if(id==='space')AUDIO.space=v;
+    if(id==='character')AUDIO.character=v;
     if(id==='harmonics')API.setHarmonics(1+v*1022);
     if(id.startsWith('ink:'))API.setInkKey(Number(id.slice(4)),v);
     Q.frame=-1;paint();
+    audioDial(id);
     updateAudio(true);
   }
   function value(id){return id==='gain'?(R.gain-.25)/3.75:id==='offset'?APP.scopeOffset/100:
+    id==='space'?AUDIO.space:id==='character'?AUDIO.character:
+    id==='theme'?(AUDIO.themeOn?1:0):
     id==='harmonics'?(API.harmonics()-1)/1022:id.startsWith('ink:')?SHV.key[Number(id.slice(4))]:AUDIO.volume;}
-  function adjustable(id){return ['gain','offset','volume','harmonics'].includes(id)||id.startsWith('ink:');}
+  function adjustable(id){return ['gain','offset','volume','space','character','harmonics'].includes(id)||id.startsWith('ink:');}
   function navigationAt(x,y){return Q.mode==='room'?null:Q.navigation.find(e=>x>=e.x&&x<=e.x+e.w&&y>=e.y&&y<=e.y+e.h);}
   function down(e,x,y){
     const nav=navigationAt(x,y);if(nav){enter(nav.id);return true;}
@@ -5344,9 +5614,10 @@ const ROOMVIEW=(()=>{
       if(Q.mode==='room'){
         if(['press','scope','stock','ink'].includes(d.id))enter(d.id);
       }else if(d.id==='sound'){AUDIO.enabled?stopAudio():startAudio();}
+      else if(d.id==='theme'){audioRoll();}
       else if(d.id==='mode'){AUDIO.mode=AUDIO.mode==='tone'?'music':'tone';updateAudio(true);}
       else if(d.id==='source:open')SHOPVIEW.openPicker();
-      else if(d.id.startsWith('source:')){API.setSource(d.id.slice(7));Q.note='Source ready. Continue at the press.';Q.frame=-1;paint();}
+      else if(d.id.startsWith('source:')){API.setSource(d.id.slice(7));hitSound('sheet',0.45);Q.note='SOURCE READY · CONTINUE AT THE PRESS';Q.frame=-1;paint();}
     }
     try{document.getElementById('stage').releasePointerCapture(e.pointerId);}catch(_){}
     return true;
@@ -5388,7 +5659,7 @@ const ROOMVIEW=(()=>{
 </script>
 <script>
 /* ═══════════════════════════════════════════════════════════════════════════
-   w-stock.js — BRING A FILE. The source desk, and nothing else.
+   w-stock.js — THE LIGHT TABLE. The source desk, and nothing else.
 
    The press owns registration, the proof and the edition; the ink library owns
    coverage and mixing; the listening bench owns sound. This desk owns exactly
@@ -5443,7 +5714,7 @@ const STOCK_STATION=(()=>{
   const clampVal=v=>v>1?1:(v<-1?-1:v);
 
   function srcLabel(srcId,file){
-    if(srcId==='gsfc')return 'GSFC STRAIN RECORD';
+    if(srcId==='gsfc')return 'GSFC STRAIN';
     if(srcId==='noise')return 'HOUSE NOISE';
     if(srcId==='file')return file?('A FILE · '+String(file.kind||'').toUpperCase()):'A FILE';
     return String(srcId||'—').toUpperCase();
@@ -5531,9 +5802,8 @@ const STOCK_STATION=(()=>{
     TL.disc(g,492,39,4,C.paper);TL.disc(g,542,37,4,C.paper);
     TL.line(g,[[518,24],[520,44]],C.blue,1.2);
     /* what this desk is, and the one thing it is not */
-    TL.text(g,'BRING A FILE',92,76,18,C.blue);
-    TL.text(g,'SOURCE INTAKE · THE LIGHT TABLE · STOCK ONLY — NOT PINS, INK OR SOUND',94,94,10,C.coral);
-    TL.text(g,'WHAT COMES IN HERE IS THE COMMISSION; EVERY FIELD AND EVERY WORLD IS CUT FROM IT.',94,109,9,C.blue);
+    TL.text(g,'THE LIGHT TABLE',92,76,18,C.blue);
+    TL.text(g,'SOURCE · WHAT COMES IN IS THE COMMISSION',94,94,10,C.coral);
 
     /* ── the light table: the whole record, still ─────────────────────────── */
     const glass=[[46,120],[648,116],[644,508],[42,514]];
@@ -5544,7 +5814,7 @@ const STOCK_STATION=(()=>{
     const wx0=64,wx1=632;
     TL.text(g,'01  Re(h)',wx0,141,11,C.blue);
     TL.text(g,'02  Im(h)',300,141,11,C.coral);
-    TL.text(g,'THE WHOLE RECORD · ONE STILL PICTURE',wx1,141,9,C.blue,'right');
+    TL.text(g,'THE WHOLE RECORD',wx1,141,9,C.blue,'right');
 
     const tracks=[['re','Re',C.blue,190],['im','Im',C.coral,286]];
     const half=46;
@@ -5602,27 +5872,23 @@ const STOCK_STATION=(()=>{
           ' px · WORST '+fmt(m.max)+' px');
         band.push('CONTOUR  '+m.points+' SAMPLES · '+m.loops+' LOOP'+(m.loops===1?'':'S')+
           ' · '+m.crossings+' CROSSINGS');
-        band.push('FRAME  '+m.source+' IN → '+m.frame+' ANALYSED · OTSU '+fmt(m.level)+
-          ' ON THE '+(m.invert?'LIGHT':'DARK')+' SIDE');
-        band.push('SILHOUETTE IoU '+fmt(m.iou)+' · THE PICTURE BECAME THE WAVE, IT WAS NOT FILED BESIDE IT');
+        band.push('FRAME  '+m.source+' → '+m.frame+' · OTSU '+fmt(m.level));
+        band.push('SILHOUETTE IoU '+fmt(m.iou));
       }else if(m.kind==='audio'){
         band.push('SOURCE  '+m.source+' SAMPLES AT '+m.sr+' Hz');
         band.push('BOX-AVERAGED ×'+m.factor+' ONTO '+m.points+' SAMPLES AT '+fmt(m.rate)+' SAMPLES/s');
-        band.push('TIME IS SECONDS · FREQUENCY IS Hz · Re/Im IS x + i·H(x)');
-        band.push('A SOUND IS A RECORD HERE, NOT A PLAYBACK');
       }else{
         band.push('NUMERIC FILE  '+m.points+' POINTS IN '+m.columns+' COLUMN'+(m.columns===1?'':'S'));
-        band.push('COLUMN 1 IS t WHEN THERE ARE THREE COLUMNS, ELSE THE ROW INDEX');
-        band.push('THE COLUMNS BECOME Re AND Im EXACTLY AS WRITTEN · NOTHING IS SMOOTHED');
+        band.push('Re AND Im AS WRITTEN · NOTHING SMOOTHED');
       }
-      TL.text(g,'MEASURED FROM THE FILE THAT CAME IN',64,392,9,C.coral);
+      TL.text(g,'MEASURED FROM THE FILE',64,392,9,C.coral);
     }else{
-      TL.text(g,'MEASURED FROM THE RECORD ON THE GLASS',64,392,9,C.coral);
+      TL.text(g,'MEASURED ON THE GLASS',64,392,9,C.coral);
       if(hasRec){
         band.push('PHASE SPAN  '+fmt(turns)+' TURNS OF ACCUMULATED PHASE');
         band.push('Re ['+fmt(reLo)+', '+fmt(reHi)+']   Im ['+fmt(imLo)+', '+fmt(imHi)+']');
-        band.push('THE HEAVIEST SAMPLE IS '+pkAt+' OF '+(n-1)+' — SHOWN, NOT AVERAGED AWAY');
-        band.push('SET BY '+srcLabel(srcId,file)+' · THIS ONE RECORD FEEDS EVERY FIELD AND EVERY WORLD');
+        band.push('HEAVIEST SAMPLE '+pkAt+' OF '+(n-1));
+        band.push('SET BY '+srcLabel(srcId,file));
       }
     }
     band.slice(0,4).forEach((t,k)=>TL.text(g,t,64,414+k*22,9,C.blue));
@@ -5647,9 +5913,9 @@ const STOCK_STATION=(()=>{
     /* ── the rack: three sheets always, a fourth once a file has landed ───── */
     const rx=668,rw=326;
     TL.text(g,'CHOOSE THE SHEET',rx,140,13,C.blue);
-    TL.text(g,'CLICK ONE — IT BECOMES THE COMMISSION, NOT A SETTING',rx,156,9,C.coral);
+    TL.text(g,'CLICK ONE · IT BECOMES THE COMMISSION',rx,156,9,C.coral);
     const sheets=[];
-    sheets.push({id:'source:gsfc',label:'GSFC STRAIN RECORD',n:'1',
+    sheets.push({id:'source:gsfc',label:'GSFC STRAIN',n:'1',
       sub:'INCLUDED · '+((typeof GSFC!=='undefined'&&GSFC.n)?GSFC.n:773)+' SAMPLES',on:srcId==='gsfc'});
     sheets.push({id:'source:noise',label:'HOUSE NOISE',n:'2',
       sub:'RE-CUT AT SEED '+(A?A.seed:'—'),on:srcId==='noise'});
@@ -5657,7 +5923,7 @@ const STOCK_STATION=(()=>{
       sub:String(file.kind||'').toUpperCase()+(file.size?(' '+file.size):'')+' · '+file.name,
       on:srcId==='file'});
     sheets.push({id:'source:open',label:'OPEN A REAL FILE',n:hasFile?'4':'3',
-      sub:'IMAGE · SOUND · COLUMNS OF NUMBERS',on:false});
+      sub:'IMAGE · SOUND · NUMBERS',on:false});
     let fy=166;
     for(const sh of sheets){acts.push(folder(g,TL,C,rx,fy,rw,64,sh));fy+=78;}
 
@@ -5669,11 +5935,10 @@ const STOCK_STATION=(()=>{
       TL.disc(g,672,482,2.6,C.paper);TL.disc(g,750,590,2.6,C.paper);
       TL.knob(g,'harmonics','HARMONICS P',710,537,27,(partials-1)/1022,'P '+partials,knobs);
       TL.text(g,'PARTIALS OF THE DFT FIT',786,516,10,C.blue);
-      TL.text(g,'MAX 1023 · P 1 IS A CIRCLE',786,534,9,C.blue);
-      TL.text(g,'RE-CUTS THE WAVE, NOT THE PICTURE',786,552,9,C.blue);
-      TL.text(g,'FITTED ON THE CACHED CONTOUR',786,570,9,C.blue);
-      TL.text(g,'NEW STOCK NEEDS A NEW PROOF.',rx,628,9,C.blue);
-      TL.text(g,'SHEETS ALREADY DELIVERED STAY DELIVERED.',rx,644,9,C.blue);
+      TL.text(g,'MAX 1023',786,534,9,C.blue);
+      TL.text(g,'RE-CUTS THE WAVE',786,552,9,C.blue);
+      TL.text(g,'NEW STOCK VOIDS THE PROOF.',rx,628,9,C.blue);
+      TL.text(g,'DELIVERED SHEETS STAY.',rx,644,9,C.blue);
     }else{
       /* a torn slip pinned to the rack, so the rule is on the desk and not in a
          dialog: stock IS the commission, and the edition is never rewound */
@@ -5682,10 +5947,8 @@ const STOCK_STATION=(()=>{
         [rx+rw-4,512],[rx+rw-4,626],[rx+4,626]],C.paper);
       TL.line(g,[[rx+6,556],[rx+rw-8,556]],C.blue,.5);
       TL.disc(g,rx+rw-30,506,4.4,C.coral);
-      TL.text(g,'BEFORE YOU CHANGE THE STOCK',rx+20,542,9,C.coral);
-      TL.text(g,'NEW STOCK NEEDS A NEW PROOF.',rx+20,576,10,C.blue);
-      TL.text(g,'SHEETS ALREADY DELIVERED',rx+20,596,10,C.blue);
-      TL.text(g,'STAY DELIVERED.',rx+20,614,10,C.blue);
+      TL.text(g,'NEW STOCK VOIDS THE PROOF.',rx+20,576,10,C.blue);
+      TL.text(g,'DELIVERED SHEETS STAY.',rx+20,596,10,C.blue);
     }
 
     g.restore();
@@ -5733,10 +5996,8 @@ const INK_STATION=(()=>{
   const BAR_NAME=['BLUE','PINK','YELLOW','BLUE+PINK','PINK+YELLOW','BLUE+YELLOW',
                   'ALL THREE'];
   /* the shop's own workflow states, in the words the bench would letter */
-  const PROOF={makeready:'MAKEREADY — NO PROOF READ YET',
-    proof:'PROOF PULLED — READ IT, THEN APPROVE IT',
-    run:'PROOF APPROVED — THE EDITION IS RUNNING',
-    done:'RUN COMPLETE — THE SHEETS STAY IN THE TRAY'};
+  const PROOF={makeready:'MAKEREADY',proof:'PROOF PULLED',run:'EDITION RUNNING',
+    done:'DELIVERED'};
 
   const TIN_Y=144, TIN_W=196, TIN_H=150, TIN_X=[6,214,422];
   const SHELF_Y=296;                        /* the board the tins stand on */
@@ -5825,8 +6086,7 @@ const INK_STATION=(()=>{
     T.poly(g,[[0,26],[40,0],[LW,0],[LW,88],[0,116]],P.blue,1);
     T.poly(g,[[0,30],[36,6],[LW-14,6],[LW-14,76],[0,100]],P.pane,.86,false);
     say(g,T,P,'THE INK LIBRARY',34,74,22,P.paper,'left');
-    say(g,T,P,'COVERAGE · PAPER KEYS · THE CURRENT SAMPLE',LW-32,54,11,P.sun,'right',480);
-    say(g,T,P,'THE PRESS OWNS THE PROOF, THE RUN AND THE EDITION',LW-32,76,9.5,P.paper,'right',480);
+    say(g,T,P,'COVERAGE · THE CURRENT SAMPLE',LW-32,54,11,P.sun,'right',480);
 
     /* the shelf, its brackets, and the three tins standing on it */
     T.poly(g,[[0,SHELF_Y],[624,SHELF_Y-4],[624,SHELF_Y+14],[0,SHELF_Y+18]],P.wood,1);
@@ -5837,22 +6097,18 @@ const INK_STATION=(()=>{
     for(let i=0;i<3;i++)drawTin(g,T,P,TIN_X[i],i,PLATE[i]);
     for(let i=0;i<3;i++)drawLadder(g,T,P,TIN_X[i],i);
 
-    /* the bench note: what the ladders are, and what a dial is not */
+    /* the bench note: what the ladders are */
     T.poly(g,[[6,NOTE_Y],[6+NOTE_W,NOTE_Y-4],[6+NOTE_W,NOTE_Y+NOTE_H-4],[6,NOTE_Y+NOTE_H]],
       P.paper,1);
     T.disc(g,17,NOTE_Y+14,3.5,P.coral,1);
-    say(g,T,P,'EACH LADDER IS ONE INK SCREENED — 12% OF THAT PLATE\u2019S DOTS UP TO SOLID.',
+    say(g,T,P,'12% TO SOLID · ONE INK PER LADDER',
       30,NOTE_Y+12,9.5,P.blue,'left',NOTE_W-36);
-    say(g,T,P,'THE TINS HOLD THE INK; THE DIALS SET HOW MUCH OF EACH PLATE REACHES THE SHEET.',
-      30,NOTE_Y+24,9.5,P.mid,'left',NOTE_W-36);
-    say(g,T,P,'A DIAL CHANGES COVERAGE. IT DOES NOT MEASURE THE TIN, AND IT DOES NOT EMPTY IT.',
-      30,NOTE_Y+36,9.5,P.coral,'left',NOTE_W-36);
 
     /* the overprint chart: the seven recipes the press can make, each solid and
        then at half tint, printed on this paper like everything else here */
     T.poly(g,[[6,CHART_Y+4],[6+CHART_W,CHART_Y],[6+CHART_W,CHART_Y+CHART_H-4],
       [6,CHART_Y+CHART_H]],P.paper,1);
-    say(g,T,P,'OVERPRINT CHART · ONE PAPER, THREE PLATES',22,CHART_Y+24,12.5,P.blue,'left');
+    say(g,T,P,'OVERPRINT CHART',22,CHART_Y+24,12.5,P.blue,'left');
     for(let k=0;k<BAR.length;k++){
       const px=CELL_X+k*2*(CELL_W+CELL_GAP);
       say(g,T,P,BAR_NAME[k],px+CELL_W+CELL_GAP/2,CHART_Y+42,8,P.mid,'center',(CELL_W+CELL_GAP)*2-6);
@@ -5862,16 +6118,8 @@ const INK_STATION=(()=>{
           h?[c[0]*.5,c[1]*.5,c[2]*.5]:c,1,true);
       }
     }
-    say(g,T,P,'LEFT CELL OF EACH PAIR IS THE PLATE AT FULL INK; THE RIGHT CELL IS THE SAME PLATE AT HALF TINT.',
+    say(g,T,P,'FULL INK LEFT · HALF TINT RIGHT',
       22,CHART_Y+132,10,P.blue,'left',CHART_W-28);
-    say(g,T,P,'THE PRESS MIXES NOTHING IN A POT: THE COLOUR HAPPENS ON THE SHEET WHERE THE THREE PLATES MEET.',
-      22,CHART_Y+150,10,P.mid,'left',CHART_W-28);
-    say(g,T,P,'EVERY COLOUR THIS SHOP NAMES IS A RECIPE OF THESE THREE INKS — WHICH IS WHAT MAKES IT PRINTABLE.',
-      22,CHART_Y+168,10,P.mid,'left',CHART_W-28);
-    say(g,T,P,'THE SEVEN RECIPES ARE FIXED. THE DIALS CHANGE HOW HEAVY EACH PLATE PRINTS THEM.',
-      22,CHART_Y+186,10,P.mid,'left',CHART_W-28);
-    say(g,T,P,'TRUST THE PROOF OVER THIS CHART: THE CHART SAYS WHAT IS POSSIBLE, THE SHEET SAYS WHAT PRINTED.',
-      22,CHART_Y+201,10,P.coral,'left',CHART_W-28);
 
     /* the sample sheet on its own board, and the printing area it is laid in */
     T.poly(g,[[BOARD_X,BOARD_Y],[BOARD_X+BOARD_W,BOARD_Y],
@@ -5894,23 +6142,16 @@ const INK_STATION=(()=>{
     T.poly(g,[[SOURCE_X,SOURCE_Y],[SOURCE_X+SOURCE_W,SOURCE_Y],
       [SOURCE_X+SOURCE_W,SOURCE_Y+26],[SOURCE_X,SOURCE_Y+30]],P.pane,1);
     say(g,T,P,'THE SAMPLE ON THE PAPER',SOURCE_X+12,SOURCE_Y+17,11.5,P.paper,'left');
-    say(g,T,P,'CURRENT OVERPRINT',SOURCE_X+SOURCE_W-12,SOURCE_Y+17,9,P.sun,'right');
     T.poly(g,[[PANEL_X,PANEL_Y+4],[PANEL_X+PANEL_W,PANEL_Y],
       [PANEL_X+PANEL_W,PANEL_Y+PANEL_H],[PANEL_X,PANEL_Y+PANEL_H+4]],P.pane,1);
     T.line(g,[[PANEL_X+12,PANEL_Y+10],[PANEL_X+PANEL_W-12,PANEL_Y+8]],P.sun,1.1);
     say(g,T,P,'COVERAGE DIALS · ONE PER PLATE',PANEL_X+12,PANEL_Y+22,10.5,P.paper,'left');
     say(g,T,P,'0.30'+TIMES+' LIGHT · 1.40'+TIMES+' HEAVY',PANEL_X+PANEL_W-12,PANEL_Y+22,9,P.sun,'right');
-    say(g,T,P,'ONE DIAL PER PLATE · CLOCKWISE LAYS THE INK HEAVIER.',PANEL_X+12,PANEL_Y+162,8.5,P.paper,'left',PANEL_W-24);
-    say(g,T,P,'NOTHING HERE MEASURES THE TIN — ONLY WHAT REACHES THE SHEET.',PANEL_X+12,PANEL_Y+174,8.5,P.paper,'left',PANEL_W-24);
 
     /* the bench lettering, cut along the front edge */
     T.line(g,[[0,BAND_Y],[LW,BAND_Y]],P.pane,1.2);
-    say(g,T,P,'CHANGING COVERAGE IS A JOB CHANGE: THE PROOF NO LONGER STANDS, SO A NEW PROOF IS PULLED AND READ.',
+    say(g,T,P,'NEW COVERAGE VOIDS THE PROOF · KEPT SHEETS STAY',
       2,BAND_Y+22,12,P.coral,'left',LW-24);
-    say(g,T,P,'FINISHED EDITION SHEETS ARE KEPT IN THE TRAY. A KEPT SHEET IS NOT PRINTED AGAIN.',
-      2,BAND_Y+44,11,P.blue,'left',LW-24);
-    say(g,T,P,'THIS BENCH MIXES INK; THE PRESS PULLS THE PROOF, RUNS THE EDITION AND DECIDES WHAT IS KEPT.',
-      2,BAND_Y+60,9.5,P.mid,'left',LW-24);
   }
 
   /* ── the bench, printed once per window size ─────────────────────────────
@@ -5944,8 +6185,8 @@ const INK_STATION=(()=>{
       T.text(g,'A PROOF IS PULLED AT THE PRESS',WIN_X+WIN_W/2,WIN_Y+WIN_H/2+14,9,P.dim,'center');
     }
     const bx=SHEET_X+10,bw=SHEET_W-20,by=WIN_Y+WIN_H;
-    say(g,T,P,'PLATE · '+plate+'      LAW · '+law,bx,by+32,9.5,P.blue,'left',bw);
-    say(g,T,P,'PROOF · '+state+(sheets?('  ·  '+kept+' OF '+sheets+' SHEETS KEPT'):''),
+    say(g,T,P,'PLATE · '+plate+' · LAW · '+law,bx,by+32,9.5,P.blue,'left',bw);
+    say(g,T,P,'STATE · '+state+(sheets?(' · '+kept+' OF '+sheets+' SHEETS KEPT'):''),
       bx,by+46,9.5,P.mid,'left',bw);
     say(g,T,P,'COVERAGE · '+keys[0]+TIMES+' '+keys[1]+TIMES+' '+keys[2]+TIMES+' ON THE THREE PLATES',
       bx,by+60,9.5,P.coral,'left',bw);
@@ -6009,6 +6250,1117 @@ const INK_STATION=(()=>{
 </script>
 <script>
 /* ═══════════════════════════════════════════════════════════════════════════
+   w-synth.js — the press's own voice. The three ink plates are three voices: a
+   two-operator FM carrier plus a detuned pair per plate, each through that
+   plate's own resonant band, its own stereo position and its own gain. The
+   ink dials on the wall are this instrument's mix through the phrase: w-phrase
+   has already folded each plate's coverage into its level and brightness, so
+   those two fields arrive as the operator's mix and the engine takes them as
+   given. A plate-reverb bus — two damped delay lines, one per ear, each
+   ringing on its own with native nodes only — is the room the press stands in,
+   and six mechanical gestures (platen, sheet, snap, ink, delivery, tape) are
+   struck from voices that already exist.
+
+   Honesty: every sound here is synthesised from the phrase the record makes.
+   The source frequency is sub-audible, so this is an intentional sonification
+   and never a claim that the numerical-relativity file is audio.
+
+   Everything is built once in create(): while the app runs this file creates
+   no node and allocates nothing, and every parameter is moved with
+   setTargetAtTime/setValueAtTime on the instrument's own clock — which follows
+   a live AudioContext and, offline, is the sum of the frames the caller
+   schedules — so the same schedule renders identically in an
+   OfflineAudioContext.
+   ═══════════════════════════════════════════════════════════════════════════ */
+const SYNTH=(()=>{
+
+/* ── one source of truth for every number the instrument believes ───────────
+   Nothing here is a taste knob without a reason: each value is either a
+   physical behaviour of the press or the musical consequence of the record. */
+const TUNE={
+  /* the app's own click-free ramp constants, in seconds. A note event snaps,
+     a glide inside a note is slower, and nothing is short enough to click */
+  ramp:{frame:.04,pitch:.035,bright:.06,gain:.07,pan:.08,space:.09,wake:.025,
+        strike:.006,duck:.04,duckUp:.13,lead:.05},
+  /* the three plates, in plate order: BLUE, PINK, YELLOW. Every carrier sits on
+     exactly the pitch the phrase supplies — what differs is the ink: the
+     carrier's waveform, the interval and detune of its two partners, the ratio
+     and index of the press's own mechanical overtone, the band its filter
+     occupies and its loudness trim. */
+  plates:[
+    /* BLUE prints first and holds the sheet up: fundamental, an octave mark */
+    {name:'BLUE',car:'sine',p1:{wave:'triangle',ratio:1,cents:-7,gain:.30},
+     p2:{wave:'triangle',ratio:2,cents:0,gain:.16},fm:{ratio:2,index:.70},
+     tone:1,q:2.6,trim:.30},
+    /* PINK is the fluorescent plate: beating, a fifth of acid, a hot band */
+    {name:'PINK',car:'triangle',p1:{wave:'sawtooth',ratio:1,cents:9,gain:.34},
+     p2:{wave:'sawtooth',ratio:1.5,cents:0,gain:.20},fm:{ratio:3,index:1.60},
+     tone:1.5,q:4.6,trim:.26},
+    /* YELLOW is the warm plate: a sub-octave body under a dark band */
+    {name:'YELLOW',car:'sine',p1:{wave:'triangle',ratio:1,cents:4,gain:.20},
+     p2:{wave:'sawtooth',ratio:.5,cents:0,gain:.34},fm:{ratio:1.5,index:.45},
+     tone:.66,q:1.8,trim:.28}
+  ],
+  /* the phrase's brightness is mapped as a ratio and not a linear sweep: 300 Hz
+     to 6 kHz is the band a plate can actually hold, and a filter that opens by
+     octaves is what makes one record read dull and the next read hot. The band
+     walks log2(span) octaves over the dial, and a fixed-Q band takes 6 dB per
+     octave out of a 1/n source, so the compensation is exactly span^(b-pivot) —
+     the measured loss, not a taste. A moving band is therefore a timbre control
+     and not a volume control, which is what keeps the ink dial's loudness the
+     phrase's own equation */
+  bright:{min:300,span:20,floor:160,ceil:9000,tilt:2.995732,pivot:.45},
+  /* the modulator's depth is the plate's own ink as well: a full plate is
+     mechanically deeper, an almost-empty one is nearly a pure tone. Nothing in
+     the phrase carries this, so the FM depth is the one place this engine
+     reads the press's key itself */
+  fmCover:{open:.45,span:.55},
+  /* the press's own coverage equation (w-ink.js): 0.30 + 1.10*key, clamped. A
+     press with no shop yet reads the plate at 0.64, which is a full sheet.
+     w-phrase folds coverage into level, brightness and gate itself, so the
+     level law stays linear and the dial is applied exactly once */
+  cover:{base:.30,span:1.10,fallback:.64},
+  /* the room is two damped delay lines with a damped lowpass in each loop, one
+     line per ear. 93 ms is a plate's own dimension. Each line rings on its own:
+     one DelayNode to a cycle is the only shape this browser's offline renderer
+     breaks deterministically, while two lines crossing each other make one
+     cycle holding two delays, and that renders two different signals from one
+     schedule — which is what made a replay of the same pass drift. `ratio` is
+     the second line's length instead: at 1.07 the two trains only meet again
+     after 107 echoes (9.95 s), past the longest tail the dial can ask for, so
+     the ears never hear the same echo and the tail stays wide. Decay is asked
+     for in seconds of RT60 and turned into a loop gain over that line's own
+     round trip, so the dial means a tail and not a number. The send is trimmed
+     and down-mixed to mono: a plate has one input, and the ink's own stereo
+     image must stay on the dry path instead of being folded into the room */
+  space:{delay:.093,ratio:1.07,rt60Min:.35,rt60Span:3.2,send:.5,wetMin:.03,
+         wetSpan:.4,dampMin:900,dampMax:6000,dampPerRoot:8,dampQ:.7,hp:180,
+         fbCeil:.9,width:.85},
+  /* the master: a soft odd-harmonic shaper and a compressor that only catches a
+     hot mix. tanh is odd, so the distortion adds odd harmonics and cannot hard
+     clip; the drive is compensated after the shaper so the character dial
+     changes the harmonics and not the loudness of the press. The compressor
+     sits at one setting on purpose: one dial, one effect */
+  shape:{slope:1.8,samples:1024,driveMin:.55,driveSpan:1.5,threshold:-8,
+         knee:14,ratio:3.5,attack:.006,release:.22},
+  duck:{level:.34},                 /* the platen landing sits on the mix */
+  quiet:.0008,                      /* an exponential ramp cannot reach zero */
+  master:1,                         /* the trim on the app's volume dial */
+  maxGain:1.5,                      /* a plate's gain never exceeds this */
+  dry:.62,                          /* headroom for three voices at full ink */
+  hit:.55,                          /* gestures sit under the plates, not over */
+  pitchMin:20,pitchMax:8000,
+  energy:.7,                        /* a hit without a stated energy */
+  noise:{seconds:2,seed:917221},    /* one buffer, one seed: a probe render of
+                                       the same schedule is comparable */
+  /* the five gestures: where each one happens left-to-right on the floor, how
+     loud it is, how long it rings, and the numbers of its own mechanism. The
+     levels are set against each other on the instrument's own meter: the bar
+     coming down leads, paper follows, a pin and a roller sit under them */
+  hits:{
+    platen:{pan:-.45,decay:.16,thump:{f0:210,f1:54,time:.10,level:.55,attack:.0018},
+            body:{f:190,q:1.1,attack:.004,decay:.09,level:.32}},
+    sheet:{pan:.50,level:.22,attack:.030,decay:.28,hp:900,q:.7,
+           from:700,to:2600,time:.20},
+    snap:{pan:-.60,level:.42,attack:.0012,decay:.055,f:2650,q:15,
+          ping:{f:3300,drop:2900,time:.05,level:.17,attack:.0012,decay:.05}},
+    ink:{pan:0,level:.9,attack:.006,decay:.13,f:620,q:3.2,from:.8,to:1.2},
+    delivery:{pan:.35,level:.16,decay:.34,hp:1800,q:.6,rasp:3400,raspQ:1.4,
+              flutter:.045,steps:7,onset:.012},
+    /* the wall's tape slips: a dry tick and not a swish, in its own band up
+       under the sheet, with two steps of flutter and gone */
+    tape:{pan:.20,level:.14,decay:.09,hp:2500,q:.8,lp:6000,lpQ:.7,
+          flutter:.030,steps:3,onset:.006}
+  },
+  /* a retunable gesture lands exactly on a caller's hz: `tone` is the frequency
+     the gesture settles on (the band a click rings in, the pitch a thump lands
+     on), and every other frequency of that gesture scales with it, so the
+     gesture keeps its shape and the theme can pin it to its own key. The guard
+     is wide on purpose — a 2915 Hz pin has to be able to ring at 110 Hz, a
+     ratio of 0.038 — and it exists only to keep a caller's number from
+     producing zero or sub-audible frequencies. A gesture with no tone (sheet,
+     tape, delivery) is noise and ignores hz */
+  retuneMin:.02,retuneMax:16
+};
+/* the settled frequency of each retunable gesture, derived here so the table
+   above remains the one place any of these numbers is written down */
+TUNE.hits.platen.tone=TUNE.hits.platen.body.f;
+TUNE.hits.snap.tone=TUNE.hits.snap.f*1.1;
+TUNE.hits.ink.tone=TUNE.hits.ink.f*TUNE.hits.ink.to;
+
+const num=(v,d)=>(typeof v==='number'&&isFinite(v))?v:d;
+
+/* a deterministic noise bed: one buffer for every gesture, seeded off the
+   generator the rest of the app already uses */
+function noiseBed(ctx){
+  const n=Math.max(2,Math.round(ctx.sampleRate*TUNE.noise.seconds));
+  const buf=ctx.createBuffer(1,n,ctx.sampleRate),d=buf.getChannelData(0);
+  const rnd=mulberry32(TUNE.noise.seed);
+  for(let i=0;i<n;i++)d[i]=rnd()*2-1;
+  return buf;
+}
+
+/* the shaper's curve, built once for the file: an odd function, so the
+   distortion is odd-harmonic only and its ends are a plateau, not a clip */
+let CURVE=null;
+function shapeCurve(){
+  if(CURVE)return CURVE;
+  const n=TUNE.shape.samples,s=TUNE.shape.slope,c=CURVE=new Float32Array(n);
+  for(let i=0;i<n;i++)c[i]=Math.tanh(s*(2*i/(n-1)-1));
+  return c;
+}
+
+/* the plate's own key from the workshop, read defensively: the shop may not
+   have been built when the first frame sounds, and a missing shop is a press
+   set to a full sheet on all three plates. w-phrase reads this equation too and
+   folds it into level, brightness and gate, so this engine keeps it for the one
+   thing the phrase does not carry: how deep the plate's FM runs */
+function coverage(out){
+  const k=(typeof SHV!=='undefined'&&SHV&&SHV.key)?SHV.key:null;
+  for(let i=0;i<3;i++){
+    const v=clamp(num(k&&k[i],TUNE.cover.fallback),0,1);
+    out[i]=clamp(TUNE.cover.base+TUNE.cover.span*v,0,1);
+  }
+  return out;
+}
+
+/* wet return and loop gain for a decay dial position (see TUNE.space). Each
+   line is its own loop, so the gain answers to that line's own round trip:
+   `trip` is the delay, in seconds, that this gain closes around */
+function wetFor(s){return TUNE.space.wetMin+TUNE.space.wetSpan*s;}
+function fbFor(s,trip){
+  const rt=TUNE.space.rt60Min+TUNE.space.rt60Span*s;
+  return clamp(Math.pow(10,-3*trip/rt),0,TUNE.space.fbCeil);
+}
+function driveFor(c){return TUNE.shape.driveMin+TUNE.shape.driveSpan*c;}
+
+/* ── the engine ──────────────────────────────────────────────────────────────
+   create() builds the whole press once and starts every source silently: the
+   graph makes no sound until the first apply(), which is what lets the app
+   treat "sound on" as one call and not as a warm-up. */
+function create(ctx,opts){
+  opts=opts||{};
+  const T=TUNE;
+  const havePan=typeof ctx.createStereoPanner==='function';
+  const haveComp=typeof ctx.createDynamicsCompressor==='function';
+  const nodes=[],srcs=[],hitGains=[];
+  const keep=n=>{nodes.push(n);return n;};
+  const gain=v=>{const g=ctx.createGain();g.gain.value=v;return keep(g);};
+  const filt=(type,f,q)=>{const b=ctx.createBiquadFilter();b.type=type;b.frequency.value=f;
+    b.Q.value=q;return keep(b);};
+  const delay=t=>{const d=ctx.createDelay(1);d.delayTime.value=t;return keep(d);};
+  const pan=v=>{
+    if(!havePan){const g=gain(1);g.pan=null;return g;}   /* no panner: identity */
+    const p=ctx.createStereoPanner();p.pan.value=v;return keep(p);
+  };
+  const osc=(type,f)=>{const o=ctx.createOscillator();o.type=type;o.frequency.value=f;
+    keep(o);srcs.push(o);o.start();return o;};
+  const noise=()=>{const s=ctx.createBufferSource();s.buffer=NOISE;s.loop=true;
+    keep(s);srcs.push(s);s.start();return s;};
+
+  /* ── the buses ─────────────────────────────────────────────────────────── */
+  const voiceSum=gain(1),dry=gain(T.dry),mixBus=gain(1),hitBus=gain(T.hit);
+  /* one input to the room, down-mixed to mono: the plates keep their own stereo
+     image on the dry path, and the two return panners build the room's width
+     out of a single signal instead of folding the image into both ears */
+  const send=gain(T.space.send);
+  send.channelCount=1;send.channelCountMode='explicit';
+  send.channelInterpretation='speakers';
+  voiceSum.connect(dry);dry.connect(mixBus);
+  voiceSum.connect(send);
+  hitBus.connect(mixBus);hitBus.connect(send);
+
+  /* ── the three plate voices ────────────────────────────────────────────── */
+  const voices=[];
+  for(let i=0;i<3;i++){
+    const P=T.plates[i];
+    const car=osc(P.car,220),mod=osc('sine',440),modG=gain(0);
+    const a1=osc(P.p1.wave,220),a1G=gain(P.p1.gain);
+    const a2=osc(P.p2.wave,220),a2G=gain(P.p2.gain);
+    const carG=gain(1),mix=gain(1);
+    const bp=filt('bandpass',1400,P.q);
+    const pn=pan(0),vg=gain(0);
+    car.connect(carG);carG.connect(mix);
+    a1.connect(a1G);a1G.connect(mix);
+    a2.connect(a2G);a2G.connect(mix);
+    mod.connect(modG);modG.connect(car.frequency);
+    mix.connect(bp);bp.connect(pn);pn.connect(vg);
+    vg.connect(voiceSum);vg.connect(send);
+    voices.push({car:car.frequency,mod:mod.frequency,modG:modG.gain,
+      a1:a1.frequency,a2:a2.frequency,bp:bp.frequency,pn:pn.pan,vg:vg.gain,
+      /* the pair's fixed intervals, in the plate's own cents */
+      f1:P.p1.ratio*Math.pow(2,P.p1.cents/1200),
+      f2:P.p2.ratio*Math.pow(2,P.p2.cents/1200),
+      ratio:P.fm.ratio,index:P.fm.index,tone:P.tone,trim:P.trim});
+  }
+
+  /* ── the room: two damped lines, one per ear, each ringing on its own ──── */
+  const sendHp=filt('highpass',T.space.hp,.7);   /* the room holds no rumble */
+  send.connect(sendHp);
+  const tripA=T.space.delay,tripB=T.space.delay*T.space.ratio;
+  const dA=delay(tripA),dB=delay(tripB);
+  const dampA=filt('lowpass',1200,T.space.dampQ),dampB=filt('lowpass',1200,T.space.dampQ);
+  const sl=num(opts.space,.38);
+  const fbA=gain(fbFor(sl,tripA)),fbB=gain(fbFor(sl,tripB));
+  const wA=pan(-T.space.width),wB=pan(T.space.width);
+  const wet=gain(wetFor(sl));
+  sendHp.connect(dA);sendHp.connect(dB);
+  dA.connect(dampA);dampA.connect(fbA);fbA.connect(dA);   /* A rings on its own */
+  dB.connect(dampB);dampB.connect(fbB);fbB.connect(dB);   /* B rings on its own */
+  dA.connect(wA);wA.connect(wet);
+  dB.connect(wB);wB.connect(wet);
+  wet.connect(mixBus);
+
+  /* ── the master chain ──────────────────────────────────────────────────── */
+  const d0=driveFor(num(opts.character,.5));
+  const drive=gain(d0),post=gain(1/(T.shape.slope*d0));
+  const shaper=ctx.createWaveShaper();
+  shaper.curve=shapeCurve();shaper.oversample='2x';keep(shaper);
+  const duckG=gain(1),master=gain(0);
+  mixBus.connect(drive);drive.connect(shaper);shaper.connect(post);
+  let comp=null;
+  if(haveComp){                       /* the safety, not the sound */
+    comp=ctx.createDynamicsCompressor();
+    comp.knee.value=T.shape.knee;comp.ratio.value=T.shape.ratio;
+    comp.attack.value=T.shape.attack;comp.release.value=T.shape.release;
+    comp.threshold.value=T.shape.threshold;
+    keep(comp);post.connect(comp);comp.connect(duckG);
+  }else post.connect(duckG);
+  /* the master lands on the destination unless the caller hands over a node:
+     a theme that wants to chain the press into its own mix — its own lead, bass
+     and pad, its own glue and sheen — gives this instrument the port to land on */
+  const outNode=(opts.out&&typeof opts.out.connect==='function')?
+    opts.out:ctx.destination;
+  duckG.connect(master);master.connect(outNode);
+
+  /* ── the five gestures: struck, never built ────────────────────────────── */
+  const NOISE=noiseBed(ctx);
+  function hitPan(v){const p=pan(v);p.connect(hitBus);return p;}
+  /* a noise path: the bed through its own filters into its own envelope gain */
+  function path(p,filters){
+    const n=noise(),fs=[];
+    let node=n;
+    for(let i=0;i<filters.length;i++){
+      const b=filt(filters[i][0],filters[i][1],filters[i][2]);
+      fs.push(b);node.connect(b);node=b;
+    }
+    const g=gain(0);hitGains.push(g);node.connect(g);g.connect(p);
+    return {f:fs,g:g.gain};
+  }
+  /* the platen: the bar comes down. A low thump whose pitch drops as it lands,
+     plus the machine's own body answering through a low band */
+  const hPlaten=(()=>{
+    const H=T.hits.platen,p=hitPan(H.pan);
+    const o=osc('sine',H.thump.f0),og=gain(0);
+    o.connect(og);og.connect(p);hitGains.push(og);
+    const body=path(p,[['bandpass',H.body.f,H.body.q]]);
+    return {op:o.frequency,og:og.gain,ng:body.g,nf:body.f[0].frequency};
+  })();
+  /* the sheet: a filtered swish whose band rises as the paper feeds */
+  const hSheet=(()=>{
+    const H=T.hits.sheet,p=hitPan(H.pan);
+    const s=path(p,[['highpass',H.hp,H.q]]);
+    return {g:s.g,hf:s.f[0].frequency};
+  })();
+  /* the snap: a pin coming home — a resonant click and a small ping over it */
+  const hSnap=(()=>{
+    const H=T.hits.snap,p=hitPan(H.pan);
+    const c=path(p,[['bandpass',H.f,H.q]]);
+    const o=osc('triangle',H.ping.f),og=gain(0);
+    o.connect(og);og.connect(p);hitGains.push(og);
+    return {g:c.g,cf:c.f[0].frequency,op:o.frequency,og:og.gain};
+  })();
+  /* the ink: a damped bandpassed slap of a roller meeting the plate */
+  const hInk=(()=>{
+    const H=T.hits.ink,p=hitPan(H.pan);
+    const s=path(p,[['bandpass',H.f,H.q]]);
+    return {g:s.g,kf:s.f[0].frequency};
+  })();
+  /* the delivery: paper rustle — a fluttering high band over a rasp */
+  const hDelivery=(()=>{
+    const H=T.hits.delivery,p=hitPan(H.pan);
+    const n=noise();
+    const hp=filt('highpass',H.hp,H.q),g1=gain(0);
+    n.connect(hp);hp.connect(g1);g1.connect(p);hitGains.push(g1);
+    const rp=filt('bandpass',H.rasp,H.raspQ),g2=gain(0);
+    n.connect(rp);rp.connect(g2);g2.connect(p);hitGains.push(g2);
+    return {g:g1.gain,r:g2.gain};
+  })();
+
+  /* the tape: the wall's tape slips — a dry tick in its own band, so it is a
+     highpassed click and not the sheet's swish */
+  const hTape=(()=>{
+    const H=T.hits.tape,p=hitPan(H.pan);
+    const s=path(p,[['highpass',H.hp,H.q],['lowpass',H.lp,H.lpQ]]);
+    return {g:s.g};
+  })();
+
+  /* ── state ─────────────────────────────────────────────────────────────── */
+  const cov=new Float32Array(3);
+  const lastPitch=new Float32Array(3),lastLevel=new Float32Array(3),
+        lastPan=new Float32Array(3),lastBright=new Float32Array(3),
+        lastDepth=new Float32Array(3),lastRoot=new Float32Array(1);
+  lastPitch.fill(-1);lastLevel.fill(-1);lastPan.fill(-2);lastBright.fill(-1);
+  lastDepth.fill(-1);lastRoot[0]=-1;
+  let masterLevel=clamp(num(opts.master,.65),0,1);
+  let spaceLevel=clamp(num(opts.space,.38),0,1);
+  let charLevel=clamp(num(opts.character,.5),0,1);
+  let live=false;         /* the press has been operated at least once      */
+  let down=true;          /* the master is down: the next apply() lifts it  */
+  let ducked=false,dead=false;
+  /* ── the clock ───────────────────────────────────────────────────────────
+     An AudioContext advances on its own, so the context is the clock there: the
+     cursor follows it and can never drift more than one lead ahead of it. An
+     OfflineAudioContext does NOT advance until it renders, so a caller that
+     schedules a whole pass before startRendering() has only the sum of its own
+     frames as time — this cursor is what makes the same schedule render in
+     both. The max() is the whole trick: the later of the two wins. */
+  const offline=typeof ctx.startRendering==='function';
+  let clock=ctx.currentTime;
+  function tick(seconds){
+    const real=ctx.currentTime;
+    clock=Math.max(clock+seconds,real);
+    if(!offline&&clock>real+TUNE.ramp.lead)clock=real+TUNE.ramp.lead;
+    return clock;
+  }
+  /* lifting the master is one path, so a gesture before the first frame is
+     heard and the stop path is the only thing that overrules it. A strike
+     lifts it faster than a frame does: the attack of a gesture is the gesture */
+  function lift(now,tau){
+    down=false;
+    const m=master.gain;
+    m.cancelScheduledValues(now);
+    m.setTargetAtTime(masterLevel*TUNE.master,now,tau);
+  }
+
+  /* ── scheduling helpers: every one of them is click-free by construction ─
+     A ramp with no event before it can smear from time zero — which, in an
+     offline render, is the entire pass — so every gesture states where it
+     begins. The step down onto the quiet anchor is -62 dB: that is a strike
+     truncating the tail it interrupts, not a click. */
+  function env(a,now,attack,peak,decay){
+    a.cancelScheduledValues(now);
+    a.setValueAtTime(TUNE.quiet,now);
+    a.linearRampToValueAtTime(peak,now+attack);
+    a.exponentialRampToValueAtTime(TUNE.quiet,now+attack+decay);
+    a.setValueAtTime(0,now+attack+decay+0.002);
+  }
+  function sweep(a,now,f0,f1,time){
+    a.cancelScheduledValues(now);
+    a.setValueAtTime(f0,now);
+    if(time>0)a.exponentialRampToValueAtTime(f1,now+time);
+  }
+
+  function fire(name,energy,opts){
+    if(dead)return;
+    const e=clamp(num(energy,T.energy),0,1);
+    if(e<=0)return;                 /* no energy, no gesture */
+    const now=tick(0),H=TUNE.hits[name];
+    /* a gesture is the press being operated, so the first one lifts the master
+       the way the first frame does: a lever pulled before the tone starts is
+       still heard. A gesture after the stop path stays down. */
+    if(!live){live=true;if(down)lift(now,TUNE.ramp.strike);}
+    /* opts.hz pins a retunable gesture to the caller's key: the frequency the
+       gesture settles on is exactly that, and every frequency of the gesture
+       scales by the same factor, so it stays the same gesture in another key.
+       With no hz the factor is 1 and the gesture is bit-for-bit what it was */
+    const hz=num(opts&&opts.hz,0);
+    const r=(H&&H.tone&&hz>0)?clamp(hz/H.tone,TUNE.retuneMin,TUNE.retuneMax):1;
+    switch(name){
+      case 'platen':{
+        sweep(hPlaten.op,now,H.thump.f0*(0.6+0.8*e)*r,H.thump.f1*r,H.thump.time);
+        env(hPlaten.og,now,H.thump.attack,H.thump.level*e,H.decay);
+        env(hPlaten.ng,now,H.body.attack,H.body.level*e,H.decay);
+        sweep(hPlaten.nf,now,H.body.f*(0.8+0.4*e)*r,H.body.f*r,H.body.decay);
+        break;
+      }
+      case 'sheet':{
+        sweep(hSheet.hf,now,H.from*(0.6+0.5*e),H.to,H.time);
+        env(hSheet.g,now,H.attack,H.level*e,H.decay);
+        break;
+      }
+      case 'snap':{
+        sweep(hSnap.cf,now,H.f*(0.9+0.2*e)*r,H.f*1.1*r,0.03);
+        env(hSnap.g,now,H.attack,H.level*e,H.decay);
+        sweep(hSnap.op,now,H.ping.f*r,H.ping.drop*r,H.ping.time);
+        env(hSnap.og,now,H.ping.attack,H.ping.level*e,H.ping.decay);
+        break;
+      }
+      case 'ink':{
+        sweep(hInk.kf,now,H.f*H.from*(0.8+0.4*e)*r,H.f*H.to*r,H.decay*0.8);
+        env(hInk.g,now,H.attack,H.level*e,H.decay);
+        break;
+      }
+      case 'delivery':{
+        const peak=H.level*e,a=hDelivery.g;
+        /* paper does not decay, it flutters: small alternating steps of the
+           high band are what a rustle is, over one damped rasp */
+        a.cancelScheduledValues(now);
+        a.setValueAtTime(TUNE.quiet,now);
+        a.linearRampToValueAtTime(peak,now+H.onset);
+        for(let k=1;k<H.steps;k++)a.setValueAtTime(peak*(k%2?0.42:1),now+H.onset+k*H.flutter);
+        const end=now+H.onset+H.steps*H.flutter+H.decay;
+        a.exponentialRampToValueAtTime(TUNE.quiet,end);
+        a.setValueAtTime(0,end+0.002);
+        env(hDelivery.r,now,H.onset,peak*0.8,H.decay*0.8);
+        break;
+      }
+      case 'tape':{
+        /* a slip, not a swish: the tick is immediate, then two or three steps
+           of flutter as the tape settles back, and it is gone */
+        const peak=H.level*e,a=hTape.g;
+        a.cancelScheduledValues(now);
+        a.setValueAtTime(TUNE.quiet,now);
+        a.linearRampToValueAtTime(peak,now+H.onset);
+        for(let k=1;k<H.steps;k++)a.setValueAtTime(peak*(k%2?0.4:1),
+          now+H.onset+k*H.flutter);
+        const end=now+H.onset+H.steps*H.flutter+H.decay;
+        a.exponentialRampToValueAtTime(TUNE.quiet,end);
+        a.setValueAtTime(0,end+0.002);
+        break;
+      }
+      default:break;                  /* an unknown gesture is nothing, not a fault */
+    }
+  }
+
+  function applyCharacter(now){
+    const d=driveFor(charLevel);
+    drive.gain.setTargetAtTime(d,now,TUNE.ramp.space);
+    post.gain.setTargetAtTime(1/(TUNE.shape.slope*d),now,TUNE.ramp.space);
+  }
+  function applySpace(now){
+    wet.gain.setTargetAtTime(wetFor(spaceLevel),now,TUNE.ramp.space);
+    fbA.gain.setTargetAtTime(fbFor(spaceLevel,tripA),now,TUNE.ramp.space);
+    fbB.gain.setTargetAtTime(fbFor(spaceLevel,tripB),now,TUNE.ramp.space);
+  }
+  function setMaster(v){
+    if(dead)return;
+    const n=clamp(num(v,masterLevel),0,1);
+    if(Math.abs(n-masterLevel)<0.0005)return;
+    masterLevel=n;
+    if(!down)master.gain.setTargetAtTime(masterLevel*TUNE.master,tick(0),
+      TUNE.ramp.gain);
+  }
+  function setSpace(v){
+    if(dead)return;
+    const n=clamp(num(v,spaceLevel),0,1);
+    if(Math.abs(n-spaceLevel)<0.0005)return;
+    spaceLevel=n;applySpace(tick(0));
+  }
+  function setCharacter(v){
+    if(dead)return;
+    const n=clamp(num(v,charLevel),0,1);
+    if(Math.abs(n-charLevel)<0.0005)return;
+    charLevel=n;applyCharacter(tick(0));
+  }
+  /* the platen landing is a momentary dip, not a change of level */
+  function duck(on){
+    if(dead)return;
+    const want=!!on;
+    if(want===ducked)return;
+    ducked=want;
+    duckG.gain.setTargetAtTime(want?TUNE.duck.level:1,tick(0),
+      want?TUNE.ramp.duck:TUNE.ramp.duckUp);
+  }
+  /* the stop path: the master comes down, every ringing gesture with it, and
+     the graph stays alive so the next apply() brings it back up */
+  function silence(seconds){
+    if(dead)return;
+    const d=clamp(num(seconds,0.12),0,3),now=tick(0);
+    down=true;
+    const m=master.gain;
+    m.cancelScheduledValues(now);
+    m.setTargetAtTime(0,now,Math.max(0.005,d/3));
+    m.setValueAtTime(0,now+Math.max(0.01,d));
+    for(let i=0;i<hitGains.length;i++){
+      const a=hitGains[i].gain;
+      a.cancelScheduledValues(now);
+      a.setTargetAtTime(0,now,0.03);
+    }
+  }
+
+  /* ── the one function the loop calls ──────────────────────────────────────
+     A phrase frame in, no allocation out. Every parameter is compared with
+     what was last written and only what changed is scheduled, so a frame that
+     changes nothing costs fifteen numeric reads. */
+  function apply(phrase,seconds){
+    if(dead||!phrase)return;
+    /* seconds is the caller's frame step and nothing else: it advances the
+       clock. Every ramp length is a constant from TUNE.ramp */
+    const now=tick(clamp(num(seconds,TUNE.ramp.frame),0.005,0.5));
+    const vpitch=phrase.move?TUNE.ramp.pitch*0.67:TUNE.ramp.pitch; /* a note snaps */
+
+    coverage(cov);
+    const list=phrase.voices;
+    for(let i=0;i<3;i++){
+      const V=voices[i],v=list&&list[i];
+      if(!v)continue;                /* a phrase with no voice leaves the plate */
+      const pitch=clamp(num(v.pitch,220),TUNE.pitchMin,TUNE.pitchMax);
+      const gate=clamp(num(v.gate,1),0,1);
+      /* the phrase's gate is the plate's coverage times the colony's activity,
+         and the coverage is already in the level: what is left for this engine
+         to apply is the activity itself, so the ink dial is applied exactly
+         once and a plate whose colony has gone is silent all the same */
+      const act=cov[i]>0?clamp(gate/cov[i],0,1):gate;
+      const level=clamp(num(v.level,0),0,1)*act;
+      const bright=clamp(num(v.brightness,num(phrase.brightness,0)),0,1);
+      const pn=clamp(num(v.pan,0),-1,1);
+      const depth=clamp(num(v.fmDepth,1),0,1)*
+        (TUNE.fmCover.open+TUNE.fmCover.span*cov[i]);
+      /* the plate's own gain: the phrase's level — the ink dial is already in
+         it — and the tilt that keeps a moving band from being a volume knob */
+      const gain=clamp(level*V.trim*Math.exp(TUNE.bright.tilt*(bright-TUNE.bright.pivot)),
+        0,TUNE.maxGain);
+
+      if(Math.abs(pitch-lastPitch[i])>0.02){
+        /* fm is the modulator's ratio, cycles per carrier cycle (PhraseMap);
+           a plate's own character ratio stands in when the phrase has none */
+        const f=num(v.fm,0);
+        const ratio=f>0?f:V.ratio;
+        V.car.setTargetAtTime(pitch,now,vpitch);
+        V.mod.setTargetAtTime(pitch*ratio,now,vpitch);
+        V.a1.setTargetAtTime(pitch*V.f1,now,vpitch);
+        V.a2.setTargetAtTime(pitch*V.f2,now,vpitch);
+        lastPitch[i]=pitch;
+      }
+      if(Math.abs(depth-lastDepth[i])>Math.max(0.005,depth*0.005)){
+        V.modG.setTargetAtTime(pitch*V.index*depth,now,TUNE.ramp.bright);
+        lastDepth[i]=depth;
+      }
+      if(Math.abs(gain-lastLevel[i])>0.0015){
+        V.vg.setTargetAtTime(gain,now,TUNE.ramp.gain);
+        lastLevel[i]=gain;
+      }
+      if(Math.abs(bright-lastBright[i])>0.002){
+        V.bp.setTargetAtTime(clamp(TUNE.bright.min*Math.pow(TUNE.bright.span,bright)*
+          V.tone,TUNE.bright.floor,TUNE.bright.ceil),now,TUNE.ramp.bright);
+        lastBright[i]=bright;
+      }
+      if(V.pn&&Math.abs(pn-lastPan[i])>0.002){
+        V.pn.setTargetAtTime(pn,now,TUNE.ramp.pan);
+        lastPan[i]=pn;
+      }
+    }
+    /* the tail is damped against the key the record is in: a low tonic leaves a
+       dark room, a high one a brighter one */
+    const root=num(phrase.root,130.81278265);
+    if(root>0&&Math.abs(root-lastRoot[0])>0.5){
+      const damp=clamp(root*TUNE.space.dampPerRoot,TUNE.space.dampMin,TUNE.space.dampMax);
+      dampA.frequency.setTargetAtTime(damp,now,TUNE.ramp.space);
+      dampB.frequency.setTargetAtTime(damp,now,TUNE.ramp.space);
+      lastRoot[0]=root;
+    }
+    live=true;
+    if(down)lift(now,TUNE.ramp.wake);
+  }
+
+  function dispose(){
+    if(dead)return;
+    dead=true;
+    for(let i=0;i<srcs.length;i++){try{srcs[i].stop();}catch(e){}}
+    for(let i=0;i<nodes.length;i++){try{nodes[i].disconnect();}catch(e){}}
+    nodes.length=0;srcs.length=0;hitGains.length=0;
+  }
+
+  return {apply,hit:fire,setMaster,setSpace,setCharacter,duck,silence,dispose};
+}
+
+/* Object.freeze keeps the tuning table the one place these numbers live: a
+   caller can read what the instrument believes, and cannot edit it in flight */
+return {create,TUNE:Object.freeze(TUNE),
+  HITS:Object.freeze(['platen','sheet','snap','ink','delivery','tape'])};
+})();
+</script>
+<script>
+/* ═══════════════════════════════════════════════════════════════════════════
+   w-theme.js — THE ROOM'S OWN TUNE. Not the live mapping (that is w-sonify.js
+   and w-phrase.js, which print what the record is doing right now): this is a
+   piece with a form, played by the room itself, and every instrument in it is
+   an artifact standing on the floor.
+
+   THE ENSEMBLE — one instrument per artifact, and the pan is where the artifact
+   actually stands on the floor plan (shopLayout), so the stereo image is the
+   room:
+     THE RECORD          the lead, a whistle band-passed at twice the note
+     THE PLATE           the pad, two triangles a few cents apart
+     THE LAW             the bass, the tonic folded into 55..110 Hz
+     THE PRESS           the platen gesture, on the drive side
+     THE FEED BOARD      the sheet gesture, where the stock feeds in
+     THE REGISTER PINS   the snap gesture, tuned to the tune's tonic
+     THE THREE INKS      the three plate voices (a just major triad) + the slap
+     THE DELIVERY PILE   the rustle, hard left where the pile is cropped
+     THE TAPE            the tape tick, on the wall
+     THE SPARE PLATES    the snap again, an octave above the pins
+     THE BENCH           the master chain — glue, shelf, clip (see bench())
+     THE ROOM            the plate-reverb bus inside w-synth.js
+
+   EVERY NUMBER COMES FROM THE DATASETS. The tonic is the record's own pitch
+   folded into the bass register; the tempo is one bar per turn of the record's
+   phase, so the tune accelerates with the inspiral; the melody is the record's
+   pitch quantised onto the five slots and it takes a breath whenever the record
+   holds still; the bass line is the world's occupation; the pad's level and
+   detune are the field's magnitude and phase; the pans are the floor plan.
+
+   THE TUNE IS JUST INTONATION: 1/1 9/8 5/4 3/2 5/3, five slots to the octave,
+   low integers only — the same five slots the plates already print, so the
+   harmony cannot fight the instrument. There is no whole-tone scale in it.
+
+   THE MASTER CHAIN, in this order and nothing else:
+     sum → glue compressor 2:1, gentle, never more than 12 dB of reduction →
+     high shelf −4 dB at 5.5 kHz → soft-clip waveshaper, oversampling OFF → out.
+   bench() builds exactly that on its own, so its transfer can be measured
+   without the tune playing through it.
+   ═══════════════════════════════════════════════════════════════════════════ */
+const THEME=(()=>{
+const num=(v,d)=>(typeof v==='number'&&isFinite(v))?v:d;
+
+/* ── §1 · every number the tune believes ─────────────────────────────────── */
+const T={
+  /* five slots to the octave, just intonation: 0 204 386 702 884 cents above
+     the tonic. The steps are 204, 182, 316, 182, 316 — a pentatonic, not a
+     whole-tone scale, and the third is 5/4 rather than 400 cents. */
+  scale:[1,1.125,1.25,1.5,1.6666666666666667],
+  scaleName:['1/1','9/8','5/4','3/2','5/3'],
+  /* the lead: a pure carrier with its own second harmonic, the pair taken
+     through a band at TWICE the note. That band is the whistle. No sawtooth, no
+     resonant squeal, no breath layer of any kind — a whistle is a harmonic and
+     not noise — and the lead sits well below the bass in level. */
+  lead:{trim:.115,body:.5,harm:.5,bpQ:3.2,band:2,attack:.035,decay:1.3,rest:.75,
+        level:.5,lo:165,hi:440},
+  /* the bass: the tonic folded into the register a press is heard in, a sub
+     octave under it and a triangle for the body, all behind one low band */
+  bass:{lo:55,hi:110,trim:.42,sub:.62,body:.34,band:210,q:.7,attack:.012,
+        release:.16,level:.5,fifth:3},
+  /* the pad: the field through two triangles a few cents apart, mid band, with
+     the slowest envelope on the floor because the field moves slowly */
+  pad:{oct:2,trim:.16,detune:9,band:1250,q:.6,attack:1.6,level:.5,
+       floor:.35,span:.65,width:.34},
+  /* the harmony: the press's own three plates, a just major triad four octaves
+     up so the tune and the instrument agree, held for a beat and a half */
+  harmony:{oct:4,degrees:[0,2,4],brightness:.15,level:1,hold:3,pan:.12},
+  /* the tempo: one bar is one turn of the record's own phase, four beats to the
+     bar, clamped to the range a press can actually be operated at */
+  tempo:{min:.30,max:1.20,fallback:.483},
+  /* the bench: the glue is gentle and never takes more than 12 dB */
+  glue:{threshold:-18,knee:6,ratio:2,attack:.012,release:.28},
+  shelf:{frequency:5500,gain:-4},
+  clip:{drive:1.15,samples:1024,oversample:'none'},
+  fade:{in:.08,out:.12},
+  quiet:.0008,
+  /* the floor plan, in fractions of the layout width. Used only when the shop
+     has not published its own layout (an offline render before boot). */
+  place:{record:.5,field:.5,world:.5,press:.876,stock:.681,plates:.582,
+         delivery:.039,tapes:.1855,wall:.2175,pins:.5,bench:.5,room:.5}
+};
+
+/* ── §2 · the arrangement ────────────────────────────────────────────────────
+   One row per section; a bar is eight half-beats. The four sections are the
+   record's own arc: the plates come up, the proof is pulled, the edition runs,
+   then everything is on the floor at once. `lead` is 1 when the record's line
+   may sing, `pad` is the section the field is heard in. */
+const HIT={platen:1,sheet:2,pins:4,ink:8,harmony:16,delivery:32,tape:64,wall:128};
+const FORM=[
+  {name:'MAKEREADY',bars:4,lead:0,
+   hits:{platen:[0,4],pins:[0]},bass:[0,4]},
+  {name:'PROOF',bars:4,lead:1,
+   hits:{platen:[0,4],pins:[0],sheet:[3,6]},bass:[0,2,4,6]},
+  {name:'EDITION',bars:4,lead:1,
+   hits:{platen:[0,4],pins:[0],sheet:[3,6],ink:[4],harmony:[4],delivery:[7]},
+   bass:[0,2,4,6]},
+  {name:'DELIVERY',bars:4,lead:1,
+   hits:{platen:[0,2,4,6],pins:[0],sheet:[3,6],ink:[4],harmony:[4],delivery:[7],
+         tape:[5],wall:[2,6]},
+   bass:[0,1,2,3,4,5,6,7]}
+];
+const BARS=FORM.reduce((n,f)=>n+f.bars,0);
+const UNITS=BARS*8;                    /* half-beats in the whole form */
+const SCORE=new Uint8Array(UNITS);     /* what is struck, by half-beat */
+const LINE=new Uint8Array(UNITS);      /* the bass line: bit 1 beat, bit 4 sub */
+const SECTION=new Uint8Array(BARS),LEAD=new Uint8Array(BARS);
+(function arrange(){
+  let bar=0;
+  for(let s=0;s<FORM.length;s++){
+    const f=FORM[s];
+    for(let b=0;b<f.bars;b++,bar++){
+      SECTION[bar]=s;LEAD[bar]=f.lead?1:0;
+      for(const name in f.hits){
+        const bit=HIT[name];if(!bit)continue;
+        const at=f.hits[name];
+        for(let k=0;k<at.length;k++)SCORE[bar*8+(at[k]|0)]|=bit;
+      }
+      for(let k=0;k<f.bass.length;k++)LINE[bar*8+(f.bass[k]|0)]|=1;
+      LINE[bar*8]|=4;                  /* the sub octave answers the downbeat */
+    }
+  }
+})();
+const SECTION_NAME=FORM.map(f=>f.name);
+
+/* ── §3 · the tune over the record ───────────────────────────────────────────
+   Pure and allocation-free: fold a pitch into a register, quantise a pitch onto
+   the five slots, and read the tempo the record asks for. */
+function fold(hz,lo,hi){
+  if(!(hz>0))return 0;
+  let v=hz,k=0;
+  while(v<lo&&k++<64)v*=2;
+  while(v>=hi&&k++<64)v/=2;
+  return v;
+}
+function slotOfSlot(slot){return ((slot%5)+5)%5;}
+function slotOf(hz,tonic){
+  if(!(hz>0)||!(tonic>0))return 0;
+  return ((Math.round(Math.log(hz/tonic)/Math.LN2*5)%5)+5)%5;
+}
+function slotHz(tonic,slot){
+  const d=slotOfSlot(slot),o=(slot-d)/5;
+  return tonic*T.scale[d]*Math.pow(2,o);
+}
+function slotName(slot){return T.scaleName[slotOfSlot(slot)];}
+/* the tempo the record asks for: one bar per turn of its own phase. The drive
+   walks `stride` samples per generation at `speed` generations a second, so a
+   turn takes (samples / turns) / (stride * speed) seconds. */
+function tempoFor(rec,stride,speed){
+  const len=rec&&rec.re?rec.re.length:0,turns=rec&&rec.turns>0?rec.turns:0;
+  const st=Math.max(1,stride||1),sp=Math.max(1e-3,speed||1);
+  const turn=(len>0&&turns>0)?(len/turns)/(st*sp):0;
+  return {turn:turn,beat:clamp(turn>0?turn/4:T.tempo.fallback,T.tempo.min,T.tempo.max)};
+}
+
+/* ── §4 · the bench: the master chain, and nothing else ──────────────────────
+   Sum in, glue, shelf, soft clip, out — built on its own so it can be measured
+   on its own. create() feeds the whole floor through these same nodes. */
+function softCurve(drive,samples){
+  const n=Math.max(64,samples|0),c=new Float32Array(n),k=1/Math.tanh(drive);
+  for(let i=0;i<n;i++)c[i]=Math.tanh(drive*(i/(n-1)*2-1))*k;
+  return c;
+}
+function bench(ctx,opts){
+  const o=opts||{};
+  const input=ctx.createGain(),output=ctx.createGain();
+  input.gain.value=1;output.gain.value=1;
+  let glue=null;
+  if(typeof ctx.createDynamicsCompressor==='function'&&o.glue!==false){
+    glue=ctx.createDynamicsCompressor();
+    glue.threshold.value=num(o.threshold,T.glue.threshold);
+    glue.knee.value=T.glue.knee;glue.ratio.value=T.glue.ratio;
+    glue.attack.value=T.glue.attack;glue.release.value=T.glue.release;
+  }
+  /* then the shelf, then the soft clip. The curve has no corner in it at any
+     level, so the output can leave the machine without a hard edge; oversampling
+     stays off because the curve is already smooth and nothing else in this app
+     oversamples. */
+  const shelf=ctx.createBiquadFilter();
+  shelf.type='highshelf';shelf.frequency.value=T.shelf.frequency;
+  shelf.gain.value=num(o.shelf,T.shelf.gain);
+  const clip=ctx.createWaveShaper();
+  clip.curve=softCurve(T.clip.drive,T.clip.samples);
+  clip.oversample=T.clip.oversample;
+  if(glue){input.connect(glue);glue.connect(shelf);}else input.connect(shelf);
+  shelf.connect(clip);clip.connect(output);
+  return {input:input,glue:glue,shelf:shelf,clip:clip,output:output};
+}
+
+/* ── §5 · the tune itself ────────────────────────────────────────────────────
+   The transport runs on the instrument's own clock: live, the context is the
+   clock; offline, the clock is the sum of the frame steps the caller schedules,
+   so a render is reproducible. Nothing in step() allocates. */
+function create(ctx,opts){
+  const o=opts||{};
+  const offline=typeof ctx.startRendering==='function';
+  const board=bench(ctx,o);
+  const master=ctx.createGain();
+  const masterLevel=clamp(num(o.master,.65),0,1);
+  master.gain.value=0;
+  board.output.connect(master);master.connect(o.out||ctx.destination);
+  const space=clamp(num(o.space,.38),0,1),character=clamp(num(o.character,.5),0,1);
+
+  /* ── the press's own instrument lands on the bench's input instead of the
+     speakers: its plates are the harmony and its gestures are the percussion,
+     and both keep the dials the bench already has */
+  const synth=(typeof SYNTH!=='undefined'&&SYNTH.create)
+    ?SYNTH.create(ctx,{master:1,space:space,character:character,out:board.input}) : null;
+  const HITS=(typeof SYNTH!=='undefined'&&SYNTH.HITS)?SYNTH.HITS:[];
+  function inHits(name){
+    for(let i=0;i<HITS.length;i++)if(HITS[i]===name)return true;
+    return false;
+  }
+
+  /* ── the floor plan: every pan is where that artifact actually stands */
+  const G=L_from(o.layout);
+  const W=G?num(G.W,1560):1560;
+  function at(frac){return clamp(frac*2-1,-1,1);}
+  function where(id){
+    const p=T.place[id];
+    if(G){
+      if(id==='press'&&G.cyl)return at((G.cyl.x+G.cyl.w*0.5)/W);
+      if(id==='stock'&&G.feed)return at((G.feed.x+G.feed.w*0.5)/W);
+      if(id==='plates'&&G.ducts)return at((G.ducts.x+G.ducts.w*0.5)/W);
+      if(id==='delivery'&&G.delivery)return at((G.delivery.x+G.delivery.w*0.5)/W);
+      if(id==='tapes'&&G.tape)return at((G.tape.x+G.tape.w*0.5)/W);
+      if(id==='wall'&&G.wall)return at((G.wall.x+G.wall.w*0.5)/W);
+    }
+    return at(p);
+  }
+  const ENSEMBLE=[
+    {id:'record',label:'THE RECORD',inst:'LEAD WHISTLE AT 2x'},
+    {id:'field',label:'THE PLATE',inst:'PAD'},
+    {id:'world',label:'THE LAW',inst:'BASS'},
+    {id:'press',label:'THE PRESS',inst:'PLATEN'},
+    {id:'stock',label:'THE FEED BOARD',inst:'SHEET'},
+    {id:'pins',label:'THE REGISTER PINS',inst:'SNAP IN KEY'},
+    {id:'plates',label:'THE THREE INKS',inst:'JUST TRIAD + SLAP'},
+    {id:'delivery',label:'THE DELIVERY PILE',inst:'RUSTLE'},
+    {id:'tapes',label:'THE TAPE',inst:'PAPER TICK'},
+    {id:'wall',label:'THE SPARE PLATES',inst:'SNAP AT 2x'},
+    {id:'bench',label:'THE BENCH',inst:'GLUE · SHELF · CLIP'},
+    {id:'room',label:'THE ROOM',inst:'PLATE REVERB'}
+  ];
+  for(let i=0;i<ENSEMBLE.length;i++)ENSEMBLE[i].pan=where(ENSEMBLE[i].id);
+
+  const osc=(type)=>{const n=ctx.createOscillator();n.type=type;n.frequency.value=220;n.start();return n;};
+  const gain=(v)=>{const n=ctx.createGain();n.gain.value=v;return n;};
+  const panner=(v)=>{
+    if(ctx.createStereoPanner){const n=ctx.createStereoPanner();n.pan.value=clamp(v,-1,1);return n;}
+    return gain(1);
+  };
+
+  /* ── THE RECORD · the lead. A sine at the note and a triangle at exactly
+     twice it, together through a band at twice the note: the band is the
+     whistle. The two source gains are fixed for the life of the piece — the
+     note envelope is the only thing that moves. */
+  const lead=osc('sine'),lead2=osc('triangle');
+  const leadBody=gain(T.lead.body),leadHarm=gain(T.lead.harm);
+  const leadBP=ctx.createBiquadFilter();
+  leadBP.type='bandpass';leadBP.frequency.value=880;leadBP.Q.value=T.lead.bpQ;
+  const leadEnv=gain(0),leadTrim=gain(T.lead.trim),leadPan=panner(ENSEMBLE[0].pan);
+  lead.connect(leadBody);lead2.connect(leadHarm);
+  leadBody.connect(leadBP);leadHarm.connect(leadBP);
+  leadBP.connect(leadEnv);leadEnv.connect(leadTrim);leadTrim.connect(leadPan);
+  leadPan.connect(board.input);
+
+  /* ── THE LAW · the bass. Tonic, sub octave and body behind one low band */
+  const bassA=osc('sine'),bassSub=osc('sine'),bassBody=osc('triangle');
+  const bassSubG=gain(T.bass.sub),bassBodyG=gain(T.bass.body);
+  const bassLP=ctx.createBiquadFilter();
+  bassLP.type='lowpass';bassLP.frequency.value=T.bass.band;bassLP.Q.value=T.bass.q;
+  const bassEnv=gain(0),bassTrim=gain(T.bass.trim),bassPan=panner(ENSEMBLE[2].pan);
+  bassA.connect(bassEnv);bassSub.connect(bassSubG);bassBody.connect(bassBodyG);
+  bassSubG.connect(bassEnv);bassBodyG.connect(bassEnv);
+  bassEnv.connect(bassLP);bassLP.connect(bassTrim);bassTrim.connect(bassPan);
+  bassPan.connect(board.input);
+
+  /* ── THE PLATE · the pad. Two triangles a few cents apart, one mid band,
+     panned wide because the field is wide */
+  const padA=osc('triangle'),padB=osc('triangle');
+  const padFilter=ctx.createBiquadFilter();
+  padFilter.type='lowpass';padFilter.frequency.value=T.pad.band;padFilter.Q.value=T.pad.q;
+  const padEnv=gain(0),padTrim=gain(T.pad.trim);
+  const padPanA=panner(-T.pad.width),padPanB=panner(T.pad.width);
+  padA.connect(padFilter);padB.connect(padFilter);padFilter.connect(padEnv);
+  padEnv.connect(padTrim);padTrim.connect(padPanA);padTrim.connect(padPanB);
+  padPanA.connect(board.input);padPanB.connect(board.input);
+
+  /* ── THE THREE INKS · the harmony, fed to the press's own three voices. The
+     phrase object is written in place, so a frame allocates nothing. */
+  const chord={move:false,root:0,brightness:T.harmony.brightness,voices:[]};
+  for(let i=0;i<3;i++)chord.voices.push({pitch:220,gate:0,level:0,pan:0,
+    brightness:T.harmony.brightness,fm:0,fmDepth:1});
+
+  /* ── the transport. `pos` is in half-beats, `beat` in seconds. */
+  let clock=num(o.start,ctx.currentTime),pos=0,bar=-1,harmonyUntil=-1,lastLead=-99;
+  let tonic=0,sheetRoot=0,turn=0,beat=T.tempo.fallback,leverOn=false,dead=false;
+  const HZ={hz:0};
+  const stats={section:-1,sectionName:FORM[0].name,bar:0,unit:0,bpm:0,tonic:0,
+    turn:0,lead:0,degree:'1/1',ensemble:ENSEMBLE.length};
+
+  function tick(dt){
+    const real=ctx.currentTime;
+    clock=Math.max(clock+dt,real);
+    if(!offline&&clock>real+0.05)clock=real+0.05;
+    return clock;
+  }
+  function hold(a,now){
+    if(a.cancelAndHoldAtTime)a.cancelAndHoldAtTime(now);
+    else a.cancelScheduledValues(now);
+  }
+  /* every envelope in this file is written on a gain NODE, so the helper takes
+     the node and reaches its param itself: three call sites, one rule */
+  function env(node,now,attack,peak,decay){
+    const a=node.gain;
+    hold(a,now);
+    a.linearRampToValueAtTime(peak,now+attack);
+    a.exponentialRampToValueAtTime(T.quiet,now+attack+decay);
+    a.setValueAtTime(0,now+attack+decay+0.002);
+  }
+  /* schedule a target only when the value really moved: a still field or a
+     still record costs a comparison and no automation events */
+  function push(param,v,now,tau,eps){
+    if(Math.abs(v-param.value)<eps&&param.value>0)return;
+    param.setTargetAtTime(v,now,tau);
+  }
+  function leadNote(now,hz){
+    const band=hz*T.lead.band;
+    lead.frequency.setTargetAtTime(hz,now,.04);
+    lead2.frequency.setTargetAtTime(hz,now,.04);
+    leadBP.frequency.setTargetAtTime(band,now,.04);
+    env(leadEnv,now,T.lead.attack,T.lead.level,T.lead.decay);
+  }
+  function bassNote(now,hz){
+    bassA.frequency.setTargetAtTime(hz,now,.03);
+    bassSub.frequency.setTargetAtTime(hz*.5,now,.03);
+    bassBody.frequency.setTargetAtTime(hz*2,now,.03);
+    env(bassEnv,now,T.bass.attack,T.bass.level,T.bass.release);
+  }
+  function harmonyStrike(now){
+    const root=tonic*Math.pow(2,T.harmony.oct);
+    chord.move=true;chord.root=root;
+    for(let j=0;j<3;j++){
+      const v=chord.voices[j];
+      v.pitch=root*T.scale[T.harmony.degrees[j]];
+      v.gate=1;v.level=T.harmony.level;
+      v.pan=j===0?-T.harmony.pan:(j===1?T.harmony.pan:ENSEMBLE[6].pan*.6);
+      v.brightness=T.harmony.brightness;
+    }
+    harmonyUntil=pos+T.harmony.hold;
+  }
+  function harmonyRelease(){
+    for(let j=0;j<3;j++)chord.voices[j].gate=0;
+    harmonyUntil=-1;
+  }
+  function strike(name,energy){
+    if(synth&&inHits(name))synth.hit(name,energy);
+  }
+  function strikeInKey(name,energy,hz){
+    if(synth&&inHits(name)){HZ.hz=hz;synth.hit(name,energy,HZ);}
+  }
+
+  /* one half-beat of the arrangement: everything the score puts on this beat */
+  function fire(unit,barInForm,state,now){
+    const u=(barInForm*8+unit)|0,bit=SCORE[u]||0;
+    if(bit&HIT.platen)strike('platen',unit===0?1:.72);
+    if(bit&HIT.sheet)strike('sheet',.5);
+    if(bit&HIT.pins&&tonic>0)strikeInKey('snap',.9,tonic*2);
+    if(bit&HIT.wall&&tonic>0)strikeInKey('snap',.55,tonic*4);
+    if(bit&HIT.tape)strike('tape',.4);
+    if(bit&HIT.delivery)strike('delivery',.7);
+    if(bit&HIT.harmony&&tonic>0)harmonyStrike();
+    if(bit&HIT.ink)strike('ink',.55);
+    if(LINE[u]&1){
+      const fifth=(num(state&&state.live,0)>.5)?T.bass.fifth:1;
+      const hz=fold(tonic*fifth,T.bass.lo,T.bass.hi);
+      bassA.frequency.setTargetAtTime(hz,now,.03);
+      bassSub.frequency.setTargetAtTime(hz*.5,now,.03);
+      bassBody.frequency.setTargetAtTime(hz*2,now,.03);
+      env(bassEnv,now,(LINE[u]&4)?T.bass.attack*1.4:T.bass.attack,
+        (LINE[u]&4)?T.bass.level*1.15:T.bass.level,T.bass.release);
+    }
+  }
+
+  function step(dt,state){
+    if(dead)return;
+    const d=clamp(num(dt,1/60),.005,.5);
+    const now=tick(d);
+    if(!leverOn){leverOn=true;master.gain.setTargetAtTime(masterLevel,now,T.fade.in);}
+    const rec=state?state.rec:null;
+    const ph=state?state.ph:null;
+    const barNow=Math.floor(pos/8);
+    if(barNow!==bar){
+      const t=tempoFor(rec,num(state&&state.stride,1),num(state&&state.speed,10));
+      turn=t.turn;beat=t.beat;bar=barNow;
+      /* the tonic moves only between bars: the tune has a key, not a wobble */
+      if(ph&&ph.root>0){sheetRoot=ph.root;tonic=fold(ph.root,T.bass.lo,T.bass.hi);}
+      else if(!(tonic>0))tonic=fold(220,T.bass.lo,T.bass.hi);
+    }
+    /* the pad is the field: level from the magnitude, detune from the phase.
+       Only a real change is scheduled, so a still field costs two compares. */
+    const mag=clamp(num(state&&state.mag,.5),0,1);
+    const phase=num(state&&state.phase,0);
+    const det=T.pad.detune*(.35+.65*Math.abs(Math.sin(phase)));
+    push(padEnv.gain,T.pad.trim*(T.pad.floor+T.pad.span*mag),now,.6,.002);
+    const base=tonic*Math.pow(2,T.pad.oct);
+    push(padA.frequency,base*Math.pow(2,-det/1200),now,.9,.01);
+    push(padB.frequency,base*Math.pow(2,det/1200),now,.9,.01);
+    /* the transport: every half-beat crossed since the last call is fired, in
+       the frame that contains it */
+    const before=pos;
+    pos+=d/beat*2;
+    const first=Math.ceil(before-1e-9),last=Math.floor(pos+1e-9);
+    for(let u=first;u<=last;u++){
+      const barInForm=((u/8)|0)%BARS;
+      fire(u%8,barInForm,state,now);
+      const sec=SECTION[barInForm];
+      if(sec!==stats.section){stats.section=sec;stats.sectionName=SECTION_NAME[sec];}
+    }
+    if(harmonyUntil>0&&pos>harmonyUntil)harmonyRelease();
+    /* the record's line: it sings when the record's quantisation moves, then
+       takes a breath — the lead has air around it and stays pure */
+    const singing=LEAD[bar<0?0:bar%BARS]===1;
+    if(singing&&sheetRoot>0&&ph){
+      if((ph.move&&(pos-lastLead)>T.lead.rest)||(pos-lastLead)>6){
+        const slot=slotOf(ph.root,sheetRoot);
+        const hz=fold(sheetRoot*T.scale[slot],T.lead.lo,T.lead.hi);
+        leadNote(now,hz);
+        stats.lead=hz*T.lead.band;
+        stats.degree=slotName(slot);
+        lastLead=pos;
+      }
+    }else if(!singing)lastLead=pos;
+    if(synth){synth.apply(chord,d);chord.move=false;}
+    stats.bar=bar<0?0:bar%BARS;stats.unit=Math.round(pos%8);
+    stats.bpm=60/beat;stats.tonic=tonic;stats.turn=turn;
+  }
+
+  function setMaster(v){
+    if(dead)return;
+    const n=clamp(num(v,masterLevel),0,1);
+    const now=tick(0);
+    if(n<=0)master.gain.setTargetAtTime(0,now,T.fade.out);
+    else{leverOn=true;master.gain.setTargetAtTime(n,now,T.fade.in);}
+  }
+  function setSpace(v){if(synth)synth.setSpace(v);}
+  function setCharacter(v){if(synth)synth.setCharacter(v);}
+  function hit(name,energy,hz){
+    if(!synth||!inHits(name))return;
+    if(hz!=null&&hz>0){HZ.hz=hz;synth.hit(name,energy,HZ);}
+    else synth.hit(name,energy);
+  }
+  function silence(seconds){
+    if(synth)synth.silence(seconds);
+    const now=tick(0);
+    master.gain.setTargetAtTime(0,now,Math.max(.01,num(seconds,.1)/3));
+  }
+  function dispose(){
+    if(dead)return;dead=true;
+    if(synth){try{synth.dispose();}catch(e){}}
+    const nodes=[lead,lead2,bassA,bassSub,bassBody,padA,padB,leadBody,leadHarm,
+      leadBP,leadEnv,leadTrim,leadPan,bassSubG,bassBodyG,bassLP,bassEnv,bassTrim,
+      bassPan,padFilter,padEnv,padTrim,padPanA,padPanB,board.input,board.shelf,
+      board.clip,board.output,master];
+    if(board.glue)nodes.push(board.glue);
+    for(let i=0;i<nodes.length;i++){
+      const n=nodes[i];if(!n)continue;
+      try{if(n.stop)n.stop();}catch(e){}
+      try{n.disconnect();}catch(e){}
+    }
+  }
+  function report(){return stats;}
+  function tempoNow(){return {turn:turn,beat:beat,bpm:60/beat};}
+  return {step:step,hit:hit,setMaster:setMaster,setSpace:setSpace,
+    setCharacter:setCharacter,silence:silence,dispose:dispose,report:report,
+    tempoNow:tempoNow,synth:synth,bench:board,
+    parts:{lead:leadEnv,bass:bassEnv,pad:padEnv},
+    ensemble:ENSEMBLE,level:masterLevel};
+}
+/* the shop publishes its layout on SHV.G; before boot there is none */
+function L_from(v){return v&&typeof v==='object'?v:null;}
+
+return {create:create,bench:bench,softCurve:softCurve,fold:fold,slotOf:slotOf,
+  slotHz:slotHz,slotName:slotName,tempoFor:tempoFor,TUNE:T,FORM:FORM,
+  FORM_NAME:SECTION_NAME,HIT:HIT,SCORE:SCORE,LINE:LINE,SECTION:SECTION,LEAD:LEAD,
+  BARS:BARS,UNITS:UNITS};
+})();
+</script>
+<script>
+/* ═══════════════════════════════════════════════════════════════════════════
    w-app.js — state, controls, loop. Owns everything the user touches.
    Timer-driven on purpose: requestAnimationFrame does not fire in a hidden or
    throttled pane, which is what made the previous iteration look frozen.
@@ -6025,6 +7377,7 @@ const APP = {
      path/matrix/spectro/hst) while life on path, whose 79%-dense mask is
      dominated by its boundary at that size, dies out within a few generations. */
   srcId:'gsfc', fldId:'path', wrldId:'synch', seed:20260919,
+  duckUntil:0,
   par:{field:{}, worlds:{}}
 };
 let M=52, Muser=false, speed=10, playing=true, gen=0, liveN=0,
@@ -6037,8 +7390,8 @@ const safe=(fn,d)=>{try{return fn();}catch(e){return d;}};
 function fail(e){
   lastErr=String((e&&e.message)||e);
   if(typeof SHOPVIEW!=='undefined'&&SHOPVIEW.say)
-    SHOPVIEW.say('THE PRESS STOPPED — '+lastErr,TC.pink);
-  if(typeof ROOMVIEW!=='undefined')ROOMVIEW.say('COULD NOT COMPLETE — '+lastErr);
+    SHOPVIEW.say('THE PRESS STOPPED · '+lastErr,TC.pink);
+  if(typeof ROOMVIEW!=='undefined')ROOMVIEW.say('COULD NOT COMPLETE · '+lastErr);
 }
 window.addEventListener('error',e=>fail(e));
 
@@ -6210,95 +7563,136 @@ function recordScopePoint(){
   const value=APP.wrldId==='synch'&&APP.S?APP.S.order:liveN/Math.max(1,M*M);
   APP.scopeHist[APP.scopeN%APP.scopeHist.length]=clamp(value,0,1);APP.scopeN++;
 }
-/* Upstream sonification, operated by the listening bench. Both instruments
-   follow one sample cursor. Display gain/offset never change the record. */
-const AUDIO={ctx:null,enabled:false,mode:'tone',volume:.65,lastIndex:-1,
-  lastMode:'',lastVolume:-1,reading:{}};
+/* The press's own instrument, operated by the listening bench. The mapping that
+   feeds it stays pure (src/w-sonify.js + src/w-phrase.js) so the printed claim
+   about what each number does is still literally true of the code below it: the
+   instrument is only how those three voices are sounded. The ink dials on the
+   wall are its mix, and the room it plays in is the shop's own reverb. */
+const AUDIO={ctx:null,synth:null,theme:null,themeOn:false,enabled:false,mode:'tone',
+  volume:.65,space:.38,character:.5,
+  lastIndex:-1,lastMode:'',lastVolume:-1,lastSpace:-1,lastCharacter:-1,lastApply:0,
+  lastBar:-1,lastLead:-1,reading:{},state:{rec:null,ph:null,live:0,mag:0,phase:0,stride:1,speed:10}};
+/* the machine's own gestures. Struck from the press's real events, never from a
+   timer: the platen lands when the lever bottoms out, the pin snaps when the
+   plate comes home, and nothing sounds at all while the sound is off. */
+function hitSound(name,energy){
+  if(AUDIO.enabled&&AUDIO.synth)AUDIO.synth.hit(name,energy);
+}
+/* one tick per ink dial step, written in one place: the press's duct keys and
+   the ink library's dials both route through setInkKey, so they sound alike */
+const INK_TICK=[NaN,NaN,NaN];
 function stopAudio(){
-  const ctx=AUDIO.ctx;AUDIO.ctx=null;AUDIO.enabled=false;AUDIO.lastIndex=-1;
+  const a=AUDIO,ctx=a.ctx;
+  if(a.theme){try{a.theme.dispose();}catch(e){}a.theme=null;}
+  if(a.synth){try{a.synth.dispose();}catch(e){}a.synth=null;}
+  a.ctx=null;a.enabled=false;a.lastIndex=-1;
   if(ctx)ctx.close().catch(()=>{});
-  ROOMVIEW.say('Sound stopped. Loudness ← amplitude; pitch ← phase rotation; stereo ← complex phase.');
+  ROOMVIEW.say('SOUND STOPPED');
+}
+/* One place builds the audio graph, and it is the only place that tears the old
+   one down: the live bench (w-synth.js alone) or the room's own tune
+   (w-theme.js, which lands the same instrument on its bench chain). */
+function audioRebuild(){
+  const a=AUDIO,ctx=a.ctx;
+  if(!ctx)return;
+  if(a.theme){try{a.theme.dispose();}catch(e){}a.theme=null;}
+  if(a.synth){try{a.synth.dispose();}catch(e){}a.synth=null;}
+  try{
+    if(a.themeOn&&typeof THEME!=='undefined'&&THEME.create){
+      a.theme=THEME.create(ctx,{master:a.volume,space:a.space,character:a.character,
+        layout:(typeof SHV!=='undefined'?SHV.G:null)});
+      a.synth=a.theme.synth;
+    }else{
+      a.themeOn=false;
+      a.synth=SYNTH.create(ctx,{master:a.volume,space:a.space,character:a.character});
+    }
+    a.lastIndex=-1;a.lastBar=-1;a.lastLead=-1;a.lastApply=performance.now();
+  }catch(e){stopAudio();ROOMVIEW.say('AUDIO COULD NOT START · '+e.message);}
 }
 function startAudio(){
   if(AUDIO.enabled)return;
-  if(!APP.rec||!APP.rec.re){ROOMVIEW.say('Choose a record or bring a file to hear its waveform.');return;}
+  if(!APP.rec||!APP.rec.re){ROOMVIEW.say('CHOOSE A RECORD TO HEAR IT');return;}
   const AudioCtor=window.AudioContext||window.webkitAudioContext;
-  if(!AudioCtor){ROOMVIEW.say('This browser does not support Web Audio.');return;}
+  if(!AudioCtor){ROOMVIEW.say('NO WEB AUDIO IN THIS BROWSER');return;}
+  if(typeof SYNTH==='undefined'||!SYNTH.create){ROOMVIEW.say('NO INSTRUMENT ABOARD · w-synth.js DID NOT LOAD');return;}
+  if(AUDIO.themeOn&&(typeof THEME==='undefined'||!THEME.create)){AUDIO.themeOn=false;}
   try{
     const ctx=new AudioCtor();AUDIO.ctx=ctx;
-    const fund=ctx.createOscillator(),harm=ctx.createOscillator();
-    const g1=ctx.createGain(),g2=ctx.createGain(),filter=ctx.createBiquadFilter();
-    const pan=ctx.createStereoPanner?ctx.createStereoPanner():null,master=ctx.createGain();
-    fund.type='sine';harm.type='triangle';g1.gain.value=.82;g2.gain.value=.18;
-    filter.type='lowpass';filter.Q.value=.7;master.gain.value=0;
-    fund.connect(g1);harm.connect(g2);g1.connect(filter);g2.connect(filter);
-    if(pan){filter.connect(pan);pan.connect(master);}else filter.connect(master);
-    master.connect(ctx.destination);fund.start();harm.start();
-    Object.assign(AUDIO,{fund,harm,filter,pan,master,enabled:true,lastIndex:-1});
+    AUDIO.enabled=true;
+    audioRebuild();
     playing=true;
     ctx.resume().then(()=>{if(AUDIO.ctx===ctx)updateAudio(true);})
-      .catch(e=>{if(AUDIO.ctx===ctx){stopAudio();ROOMVIEW.say('Audio could not start: '+e.message);}});
-  }catch(e){stopAudio();ROOMVIEW.say('Audio could not start: '+e.message);}
+      .catch(e=>{if(AUDIO.ctx===ctx){stopAudio();ROOMVIEW.say('AUDIO COULD NOT START · '+e.message);}});
+  }catch(e){stopAudio();ROOMVIEW.say('AUDIO COULD NOT START · '+e.message);}
 }
 function updateAudio(force){
-  if(!AUDIO.enabled||!AUDIO.ctx)return;
-  const a=AUDIO,now=a.ctx.currentTime,rec=APP.rec&&APP.rec.re?APP.rec:null;
+  if(!AUDIO.enabled||!AUDIO.ctx||!AUDIO.synth)return;
+  const a=AUDIO,rec=APP.rec&&APP.rec.re?APP.rec:null;
+  /* a stopped press is a silent press, but the graph stays up so the next pull
+     brings it straight back */
   if(!playing||speed<=0||!rec){
-    if(a.lastIndex!==-2){a.master.gain.setTargetAtTime(0,now,.025);a.lastIndex=-2;}return;
+    if(a.lastIndex!==-2){
+      if(a.theme)a.theme.silence(.15);else a.synth.silence(.1);
+      a.lastIndex=-2;
+    }return;
   }
+  /* the real frame time, so the instrument's own clock follows the drive */
+  const now=performance.now(),dt=Math.min(.5,(now-a.lastApply)/1000)||1/60;
+  a.lastApply=now;
   const index=scopeIndex(rec);
-  if(!force&&index===a.lastIndex&&a.lastMode===a.mode&&a.lastVolume===a.volume)return;
-  const v=APP.feedback?sonifyLifeFrame(rec,APP.feedback,index,a.mode,a.reading):sonifyFrame(rec,index,a.mode,a.reading);
-  a.fund.frequency.setTargetAtTime(v.pitch,now,.035);
-  a.harm.frequency.setTargetAtTime(v.pitch*2,now,.035);
-  a.filter.frequency.setTargetAtTime(400+4200*v.brightness,now,.06);
-  if(a.pan)a.pan.pan.setTargetAtTime(v.pan,now,.08);
-  a.master.gain.setTargetAtTime(a.volume*(.003+.45*Math.pow(v.level,.85)),now,.07);
+  if(a.theme){
+    /* the tune reads the same record, the same world and the same field the
+       live mapping does, and it is written every frame: its transport is the
+       press's own drive */
+    const st=a.state;
+    st.rec=rec;st.ph=a.reading;st.stride=scopeStride(rec);st.speed=speed;
+    st.live=clamp(liveN/Math.max(1,M*M),0,1);
+    const i=clamp(index,0,rec.re.length-1),amax=rec.amax||1;
+    const re=rec.re[i]/amax,im=rec.im?rec.im[i]/amax:0;
+    st.mag=Math.min(1,Math.hypot(re,im));st.phase=Math.atan2(im,re);
+    phraseFrame(rec,APP.feedback||null,i,a.mode,a.reading);
+    a.theme.setMaster(a.volume);a.theme.setSpace(a.space);a.theme.setCharacter(a.character);
+    a.theme.step(dt,st);
+    const r=a.theme.report(),key=r.bar*100+r.section;
+    if(key!==a.lastBar){
+      a.lastBar=key;
+      ROOMVIEW.say('THE ROLL · '+r.sectionName+' · BAR '+(r.bar+1)+'/'+THEME.BARS+
+        ' · '+Math.round(r.bpm)+' BPM');
+    }
+    /* the record's own line gets its own announcement: the bar line is written
+       before the bar is played, so the lead can only be reported as it sounds */
+    const lead=Math.round(r.lead);
+    if(lead>0&&lead!==a.lastLead){
+      a.lastLead=lead;
+      ROOMVIEW.say('THE RECORD SINGS · LEAD '+lead+' Hz · '+r.degree);
+    }
+    return;
+  }
+  if(!force&&index===a.lastIndex&&a.lastMode===a.mode&&a.lastVolume===a.volume&&
+    a.lastSpace===a.space&&a.lastCharacter===a.character)return;
+  const v=phraseFrame(rec,APP.feedback||null,index,a.mode,a.reading);
+  a.synth.setMaster(a.volume);a.synth.setSpace(a.space);a.synth.setCharacter(a.character);
+  a.synth.duck(now<APP.duckUntil);          /* the platen landing sits on the mix */
+  a.synth.apply(v,dt);
   a.lastIndex=index;a.lastMode=a.mode;a.lastVolume=a.volume;
-  ROOMVIEW.say((a.mode==='music'?'PHASE MUSIC':'STRAIN TONE')+' · '+Math.round(v.pitch)+
-    ' Hz audible · amplitude '+Math.round(v.level*100)+'% · intentional sonification');
+  a.lastSpace=a.space;a.lastCharacter=a.character;
+  ROOMVIEW.say((a.mode==='music'?'PHASE MUSIC':'STRAIN TONE')+' · '+v.chordName+' · '+v.degree+
+    ' · PLATES '+Math.round(v.voices[0].pitch)+'/'+Math.round(v.voices[1].pitch)+'/'+
+    Math.round(v.voices[2].pitch)+' Hz');
 }
-/* the measured headline for each world; every number here is from that world's
-   probe or from the browser, and none of them are estimates */
-const WORLD_NOTE={
-  synch:'Measured on the record: the board locks 0.84/0.83/0.90 of its cells at 52/76/120 '+
-        'while the global order parameter swings 0.17/0.23/0.29. "Locked" counts cells whose '+
-        'LOCAL order is above 0.9 and r is the GLOBAL phase average, so the two need not '+
-        'agree: coherent domains cancel each other in the global average. The disorder '+
-        'spread scales with board area because recorded phase varies more slowly across '+
-        'neighbouring cards on a larger board; the exponent 0.25 is fitted to this record, '+
-        'not to a physical law. Lock fronts travel: with the record\'s frequencies the '+
-        'central phase gradient runs 0.00 to 0.33 rad/cell over 500 generations.',
-  grav:'Measured on the record at 52x52: mass is conserved exactly over 2000 steps '+
-       '(1386 + 2189 = 3435 + 140, boundary losses counted), but the basin is still filling '+
-       'at the end of that run — mean mass 3025.24 over steps 1501-1750 against 3311.76 '+
-       'over 1751-2000 — so its late statistics describe a transient, not a steady state. '+
-       'Over steps 801-1000 every one of the 200 generations cascades, averaging 1813 '+
-       'topplings with a largest cascade of 3549, and all 200 events exceed 200 topplings: '+
-       'a truncated distribution, and no heavy-tailed law is established. At 120x120 the '+
-       'same parameters are dormant — 6 cascades in 200 generations, 0.03 per generation, '+
-       'against 194 that move nothing. Controls separate the mechanism from a random walk: '+
-       'flat, equal-mass terrain topples 0 times, a drained variant empties instead of '+
-       'piling, and a field with no downhill direction emits nothing.',
-  rd:'Measured on the record at 52x52: the reef turns over rather than settling — its first '+
-     '200 generations hold 763, 504, 423 and 506 live cells at generations 50/100/150/200 — '+
-     'and it reaches 26.7% of the board by generation 2000 with 14 births and 7 deaths in '+
-     'the final 200. The record is in the dynamics, not only in the picture: switching the '+
-     'field to a non-isometric one at generation 500 lands on a different equilibrium — '+
-     '27.15% of the board in 1 blob where the baseline held 26.74% in 5, with a mean-v '+
-     'difference of 0.1199 — and both states keep reacting. On thin substrates it runs '+
-     'near-static instead: 17 of 143 cells on the Hilbert spectrum at 120x120.',
-  life:'A B/S rule on the record\'s self-similarity bands: the one rule family borrowed '+
-       'wholesale rather than driven, though both the substrate and the per-row rules come '+
-       'from the record. Measured: every one of the eight amplitude rows changes the rule '+
-       'in a way the picture can see — 1343 cells under uniform rules against 2796 under '+
-       'row rules by generation 100 — and the record\'s own substrate churns at 16 births '+
-       'and 16 deaths per generation at 52x52, 64 and 64 at 120x120, and 5 and 5 on the '+
-       'raw-gap substrate. Its falling variant ships off by default and is not a pile: at '+
-       '52x52 with gravity the colony thins to 59 cards from 68 and its centroid moves up '+
-       'to row 18.1 from 21.9, because the material the fall strands dies rather than '+
-       'accumulating.'
-};
+/* the operator's dials reach the tune as well as the live bench */
+function audioDial(what){
+  const a=AUDIO;
+  if(what==='space'&&a.theme)a.theme.setSpace(a.space);
+  if(what==='character'&&a.theme)a.theme.setCharacter(a.character);
+  if(what==='volume'){if(a.theme)a.theme.setMaster(a.volume);}
+}
+function audioRoll(){
+  const a=AUDIO;
+  a.themeOn=!a.themeOn;
+  if(a.enabled)audioRebuild();else if(a.themeOn)startAudio();
+  ROOMVIEW.say(a.themeOn?'THE ROLL PLAYS · 16 BARS · 4 SECTIONS':'THE ROLL IS PARKED');
+}
 
 /* ── the shop floor ──────────────────────────────────────────────────────────
    A print shop is not a panel of settings; it is a sequence with consequences,
@@ -6341,7 +7735,7 @@ function knockBack(why){
     if(typeof SHOPVIEW!=='undefined'&&SHOPVIEW.deliver)SHOPVIEW.deliver('void');
   }
   SHOP.state='makeready';
-  shopSay(why+' — THE PROOF IS VOID');
+  shopSay(why+' · THE PROOF IS VOID');
 }
 /* Each pull advances the paper: a new seed means a new registration slip, a new
    dot phase and a new grain, so two sheets of one edition are two impressions
@@ -6381,14 +7775,14 @@ function pull(){
     /* a proof is pulled from a stopped press so it can actually be read */
     SHOP.state='proof';playing=false;
     paint();addSheet('proof');
-    shopSay('PROOF PULLED AT GEN '+gen+' — read it, then approve it or change something');
+    shopSay('PROOF PULLED AT GEN '+gen+' · READ IT · APPROVE');
   }else if(st==='proof'){
     SHOP.state='run';playing=true;
-    shopSay('PROOF APPROVED — running the edition of '+SHOP.N+', drive in');
+    shopSay('PROOF APPROVED · EDITION OF '+SHOP.N+' RUNNING');
   }else if(st==='run'){
     paint();addSheet('edition');
     SHOP.n++;advancePaper();
-    if(SHOP.n>SHOP.N){SHOP.state='done';shopSay('RUN COMPLETE — '+SHOP.N+' SHEETS DELIVERED');}
+    if(SHOP.n>SHOP.N){SHOP.state='done';shopSay('RUN COMPLETE · '+SHOP.N+' SHEETS DELIVERED');}
   }else{ newJob();paint();return; }
   paint();
 }
@@ -6452,6 +7846,8 @@ const API={
     const n=clamp(v,0,1);if(n===SHV.key[i])return;
     SHV.key[i]=n;
     if(R.inkKey)R.inkKey[i]=.30+1.10*n;
+    const tick=Math.round(n*20);
+    if(tick!==INK_TICK[i]){INK_TICK[i]=tick;hitSound('ink',0.10);}
     knockBack('THE INK COVERAGE WAS CHANGED');
   },
   sourceCount(){ return 3; },
@@ -6623,7 +8019,7 @@ function autoM(){
     if(typeof prepRecord==='function'&&typeof GSFC!=='undefined')setSource('gsfc');
     else throw new Error('no record module: GSFC missing');
     if(entrance.get('station')==='scope')ROOMVIEW.enter('scope');
-    shopSay('JOB 001 ON THE COUNTER — the plates are off register: bring the three pins home');
+    shopSay('JOB 001 · BRING THE THREE PINS HOME');
     /* Source intake loads directly; files placed on the press feed board remain
        physical stock until they are fed into the gripper. */
     const fa=document.getElementById('f_any');

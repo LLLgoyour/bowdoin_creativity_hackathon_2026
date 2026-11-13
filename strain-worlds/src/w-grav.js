@@ -86,7 +86,7 @@ function trackActivity(S){
 
 defWorld({
   id:'grav', label:'GRAVITY',
-  blurb:'Loud valleys collect avalanches. Eyes rank 2+ piles rested 40 generations by height, then age; at most a quarter of live piles.',
+  blurb:'Loud valleys collect avalanches; the eyes are the tallest rested piles.',
   params:[
     {key:'gravity',label:'terrain gravity',min:0,max:8,step:0.1,def:3},
     {key:'slope',label:'topple above (4-card minimum)',min:2,max:8,step:1,def:4},

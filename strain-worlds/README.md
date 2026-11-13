@@ -133,15 +133,18 @@ coverage, seed and registration changes.
 ## The listening bench
 
 The bench is the scope and the synth in one instrument, drawn as machinery:
-five knobs, each dragged up and down (or scrolled over) to turn it.
+eight knobs, each dragged up and down (or scrolled over) to turn it.
 
 | Knob | What it does | Readout |
 |---|---|---|
 | `POWER` | starts and stops Web Audio after a gesture | `SOUND ON` / `SILENT` |
-| `PHASE` | `CONTINUOUS` maps the record's phase-rotation rate into the audible range as a continuous pitch; `PENTATONIC` maps each quarter-turn of phase to the next note of a C pentatonic pattern | `CONTINUOUS` / `PENTATONIC` |
-| `DISPLAY GAIN` | vertical scale of the two source traces only; it never changes a sample | 0.25x to 4.00x |
-| `SWEEP OFFSET` | moves the scan line's start within the record; samples are untouched | 0% to 100% |
-| `LOUDNESS` | output level only | 0% to 100% |
+| `PHASE` | `CONTINUOUS` maps the record's phase-rotation rate into the audible range as a continuous pitch; `PENTATONIC` quantises it onto five slots tuned by just intonation — `1/1 9/8 5/4 3/2 5/3` on C3 = 130.81 Hz | `CONTINUOUS` / `PENTATONIC` |
+| `ROOM` | the shop answering: how much of the plate reverb the instrument plays in | 0% to 100% |
+| `DIRT` | the instrument's own character — how hard the plates and gestures are driven | 0% to 100% |
+| `GAIN` | vertical scale of the two source traces only; it never changes a sample | 0.25x to 4.00x |
+| `SWEEP` | moves the scan line's start within the record; samples are untouched | 0% to 100% |
+| `VOLUME` | output level only | 0% to 100% |
+| `THE ROLL` | plays the room's own tune instead of the live bench mapping | `PLAYING` / `PARKED` |
 
 The screen shows three traces read off the live state. **01 `Re(h)`** and
 **02 `Im(h)`** are the actual samples of the current record, windowed around the
@@ -149,8 +152,8 @@ scan position, with the sweep line and a dot on the sample the synth is reading.
 **03** is the world's own response — global phase order `r` for SYNCHRONY, live
 card occupancy for the other rules — with its vertical range expanded so small
 changes stay visible while the printed percentages remain the real measurement.
-When the LIFE wave is active the two channels are labelled `Re: source + LIFE`
-and `Im: source + LIFE` instead. The footer prints `SAMPLE i / n`, the record's
+When the LIFE wave is active the two channels are labelled `Re · SOURCE + LIFE`
+and `Im · SOURCE + LIFE` instead. The footer prints `SAMPLE i / n`, the record's
 value at that sample and the current gain.
 
 The source advances by `round(sample count / 360)` samples per generation (two
@@ -185,9 +188,41 @@ filter brightness, its real component for stereo position, and its real and
 imaginary components to bend the source-based pitch, quantised to semitones in
 `PENTATONIC`. The wave is recomputed when the board's state changes — including
 after a shake — so a still board keeps its last reading rather than being redrawn
-per frame. Other worlds keep the record's own sonification.
+per frame. The bend is quantised onto the same five just-intonation slots the
+rest of the bench uses (`1/1 9/8 5/4 3/2 5/3`), so the LIFE wave cannot play a
+note the plates do not print. Other worlds keep the record's own sonification.
 `node tools/probe-life-feedback.mjs` checks that changing cell positions changes
 both the displayed wave and the sound controls without editing the data.
+
+## The room's own tune
+
+Turn `THE ROLL` and the room stops following the record and plays a piece with
+it instead: sixteen bars in four sections — `MAKEREADY → PROOF → EDITION →
+DELIVERY` — with one instrument for every artifact standing on the floor.
+`node tools/probe-theme.mjs` renders the whole form offline through the shipped
+code and every number below is its output.
+
+| the piece | measured |
+|---|---|
+| the form | 16 bars, 128 half-beats; all four sections sound in order, then the piece returns to the top |
+| the record's line | bars `0000111111111111` — the lead is silent through the makeready and sings from the proof on |
+| the key | the tonic is the record's own phrase root folded into 55..110 Hz at every bar line: 130.8 Hz → 65.41 Hz |
+| the tempo | one bar per turn of the record's own phase, clamped to 0.30..1.20 s/beat: 0.876 s/beat (68.5 BPM) on this record |
+| the tuning | just intonation `1/1 9/8 5/4 3/2 5/3` on C3 = 130.81278265 Hz — the same five slots the plates print, so the tune cannot fight the instrument |
+| the mix | 57.1 s rendered at 22.05 kHz: peak 0.518, rms 1.04e-1, clip 0, stereo width 0.055 |
+
+The pans are the floor plan, so the stereo image is the room: the press on the
+drive side, the feed board where the stock feeds in, the delivery pile hard left
+where the frame crops it. The score strikes `platen 41, sheet 24, snap 25,
+ink 8, delivery 8, tape 4` across the form, and its eight instruments are all
+used (`platen 40, sheet 24, pins 16, ink 8, harmony 8, delivery 8, tape 4,
+wall 8` half-beats): the register pins and the spare plates are two instruments
+that sound as one struck snap, an octave apart.
+
+The master chain is the whole of it — sum, glue compressor 2:1, high shelf −4 dB
+at 5.5 kHz, soft clip, out. The transport runs on the instrument's own clock:
+live, the context is the clock; offline, the clock is the sum of the frame steps
+the caller schedules, so the same schedule renders the same samples twice.
 
 ## The press
 
@@ -243,6 +278,26 @@ three solids, their half tints and all four overprints — printed *through the
 same three plates* as the image, because a control strip that was composited
 separately would not show the registration slip it exists to reveal.
 
+## The machine speaks
+
+`hitSound(name, energy)` is the only way a station makes a noise, and it is
+struck by the machine doing something — never by a timer. Every action that
+changes the job speaks with the gesture of the part it moves, and nothing
+decorative speaks. The gestures are exactly the six the instrument has.
+
+| Gesture | What strikes it |
+|---|---|
+| `platen` | the lever bottoming out; a phone shake knocking the frame |
+| `sheet` | stock into the grippers; a carried sheet fed in; a folder selected on the light table; a sheet binned |
+| `snap` | a cam hauled onto its shaft; a register pin coming home; a spare plate lifted off the wall; a tappet wheel or head dial clicking to its next detent |
+| `ink` | a plate clamped onto the cylinder; an ink key moved or a coverage dial turned — one call site, so the press and the library sound alike |
+| `delivery` | a sheet arriving on the delivery pile |
+| `tape` | every slip the machine prints |
+
+`node tools/probe-synth.mjs` renders each gesture alone against a silenced
+control and measures it; `node tools/probe-theme.mjs` counts them as the room's
+own tune strikes them.
+
 ## The record
 
 `src/data-gsfc.js` holds the GSFC QC6 strain record as base64 Float64 blocks:
@@ -254,10 +309,11 @@ frequency.
 **Provenance is unverified.** The supplied file is named
 `GSFC_QC6_strain_2_2.dat.txt` and its header says only `#time Re(h) Im(h)`.
 The filename is not evidence of a particular observatory, catalogue, physical
-event, publication or licence. No authoritative source for this exact file
-was established. Its original bytes are retained unchanged; it is used here
-as an artistic numeric input. The toy's seconds/Hz labels assume seconds in
-the time column; the file itself does not establish those units.
+event, publication or licence. No source document was located: the name
+`GSFC_QC6_strain_2_2.dat.txt` is all that is known about the run. Its original
+bytes are retained unchanged; it is used here as an artistic numeric input.
+The toy's seconds/Hz labels assume seconds in the time column; the file itself
+does not establish those units.
 
 Two things about it are worth stating because code depends on them:
 
@@ -374,6 +430,16 @@ each world's own probe, on the record at 52x52 unless noted.
 | `grav` GRAVITY | grains fall on a terrain made from the record's loudness, toppling in 4-grain cascades | mass conserved exactly over 2000 steps (`maxResidual 0`); 1813 topplings/generation late; drainage and flat-terrain controls behave differently |
 | `rd` REACTION | Gray-Scott reef on the record's footprint | turns over: 763/504/423/506 live at gen 50/100/150/200, 26.7% of the board at 2000 with 14 births and 7 deaths in the final 200; a non-isometric path->spectro switch at gen 500 lands on a different equilibrium (27.15% in 1 blob vs 26.74% in 5, mean-v 0.1199); faces capped at 25.000/24.922/24.962% (path), 25.000/24.870/24.902% (matrix), 23.529% on a 17-cell population |
 | `life` LIFE | B/S rule family on the record's self-similarity bands, per-row rules from row loudness | 144-case rule truth table, 0 mismatches; byte-identical replay; all 8 amplitude rows change the picture (1343 cells uniform vs 2796 row-driven at gen 100) |
+
+**`synch` measured in the browser.** Measured on the record: the board locks
+0.84/0.83/0.90 of its cells at 52/76/120 while the global order parameter swings
+0.17/0.23/0.29. "Locked" counts cells whose LOCAL order is above 0.9 and r is the
+GLOBAL phase average, so the two need not agree: coherent domains cancel each
+other in the global average. The disorder spread scales with board area because
+recorded phase varies more slowly across neighbouring cards on a larger board;
+the exponent 0.25 is fitted to this record, not to a physical law. Lock fronts
+travel: with the record's frequencies the central phase gradient runs 0.00 to
+0.33 rad/cell over 500 generations.
 
 **What "the record stays in the dynamics" is tested to mean**, since it is the
 whole point:
@@ -519,6 +585,9 @@ for `rd` at 120x120.
     src/w-stock.js      the SOURCE station: source choices, stock preview, harmonics
     src/w-ink.js        the INKS station: coverage dials, overprint chart, live sample
     src/w-sonify.js     record -> audible controls (tone, music, LIFE feedback)
+    src/w-phrase.js     the phrase: five just slots, per-voice pitch, level and pan
+    src/w-synth.js      the instrument: three plate voices and the six gestures
+    src/w-theme.js      the room's own tune: form, ensemble, pans, master bench
     src/w-app.js        the shop: job state, media intake, simulation clock
     src/data-gsfc.js    generated record embed
     tools/embed.mjs     record -> src/data-gsfc.js
@@ -527,6 +596,10 @@ for `rd` at 120x120.
     tools/probe-furniture.mjs   registration, workflow-dependent marks, sheet snapshots
     tools/probe-overprint.mjs   exact cached/uncached pixel parity across state changes
     tools/probe-sonify.mjs  the tone/music mapping
+    tools/probe-phrase.mjs  the phrase mapping: five just slots, per-voice pitch
+    tools/probe-synth.mjs   the three voices and the six gestures, rendered offline
+    tools/probe-theme.mjs   the room's own tune, rendered offline end to end
+    tools/cdp.mjs       build the app and drive it in headless Chrome (shared by the audio probes)
     tools/probe-life-feedback.mjs  the LIFE wave follows cell positions without editing data
     tools/render-sonification.mjs  writes builds/gsfc-phase-music.wav
     tools/probe-wave.mjs    the commission path: contour, epicycles, Hilbert
@@ -538,7 +611,7 @@ for `rd` at 120x120.
 
 ## Verify it
 
-    for p in press furniture overprint sonify life-feedback wave field synch grav rd life; do node tools/probe-$p.mjs; done
+    for p in press furniture overprint sonify life-feedback wave field synch grav rd life phrase synth theme; do node tools/probe-$p.mjs; done
     node tools/itest.mjs
     node prototypes/shake/tools/probe-shake-return.mjs
 
@@ -558,21 +631,72 @@ that reduction suppressed the four masks in the browser measure
 
 ## Observed for this publication
 
-The lines below are the publisher's own run on the frozen source, not a claim
-about any other machine or browser. Nothing else in this file is asserted as
-observed here.
-
-- `node build.mjs builds/strain-worlds.html` inlines **14/14** modules from
-  `shell.html` with no missing script, and the standalone file is 343.5 KiB.
-- Syntax checked for `w-room.js`, `w-stock.js`, `w-ink.js`, `w-app.js` and
-  `w-shop.js`; `tools/probe-life-feedback.mjs` and `tools/probe-press.mjs` pass.
-- The built file booted from `file://` with no window errors and no `lastErr`,
-  loading the supplied record (773 samples).
-- All four room labels were clicked and each routed to a distinct station —
-  `SOURCE`, `INKS`, `LISTEN`, `PRESS` — with that station's own actions and
-  dials, rather than an alias of another screen.
-- Native drags of all three registration pins left residuals `[0,0,0]` with
-  registration error empty.
-- The physical lever produced a proof and approved it into the run.
-- A native ink dial drag moved an ink key from `.64` to `.7511` and invalidated
-  the approved proof back to `makeready`, with the delivered sheets untouched.
+- `node build.mjs /Users/b/Downloads/sw-final.html` inlines 17/17 modules
+  (411.2 KB), in the order `core.js w-field.js w-synch.js w-grav.js w-rd.js
+  w-life.js data-gsfc.js w-sonify.js w-phrase.js w-render.js w-shop.js
+  w-room.js w-stock.js w-ink.js w-synth.js w-theme.js w-app.js`.
+- Every `src/*.js` passes a `new Function(source)` parse check.
+- `probe-press`: the palette resolves 44 colours with 0 unparseable and 0 that
+  separate to bare paper; after `snapPalette()` the named and printed tables
+  differ by at most dE 0.4331 across the 44, the largest palette shift being dE
+  27.71; registration reproduces seed 7 as seed 7 and separates seed 7 from
+  seed 8; slip seed 7 `(1.27,-1.18) (-0.59,-1.38) (0.54,0.32)`; all checks
+  pass.
+- `probe-furniture`: 8 files loaded, 16 checks, 0 failed. `snapshotSheet(96)`
+  returns a 15.7 kB `data:image/png` 96x96 with 2384 inked px, `''` with no
+  sheet on the stage, and leaves the stage canvas bit-identical (checksum
+  `b76ee593` before and after).
+- `probe-wave`: 16/16 world × field runs (synch/grav/rd/life × path/matrix/
+  spectro/hst) completed 120 steps without throwing, in 1198 ms of harness wall
+  time; the `hst` field mask is 213/2704 = 7.877% with amp max 0.9813.
+- `probe-sonify`: PASS, 773 samples; peak sample 549; loudness 0.026 → 1.000;
+  audible tone 110.0..800.0 Hz; 44 phase quarter-turns; music mode spreads 10
+  slots over two octaves of just intonation on C3 130.813 Hz —
+  130.813/147.164/163.516/196.219/218.021 Hz, ratios 1/1 9/8 5/4 3/2 5/3.
+- `probe-phrase`: PASS, 773 samples against `sonifyLifeFrame`; 44 note events
+  (5.7%); 15 chords and 5 degrees; voices spread 130.8 Hz at the strongest
+  sample; voice objects reused in place; keys raise their own plate only; replay
+  deterministic; the silent path silent.
+- `probe-synth`: PASS in Chrome 153.0.8010.50; steady rms 1.77e-2 (first second
+  1.69e-2, last second 1.85e-2); plates alone BLUE 8.46e-3, PINK 4.72e-3, YELLOW
+  3.61e-2; every plate gated shut 0.00e+0; hot three-plate mix peak 0.281, no
+  clip, rms 5.67e-2; gestures alone against the silenced control platen 4.03e-2,
+  sheet 2.12e-2, snap 6.90e-3, ink 7.81e-3, delivery 2.24e-2; the platen in the
+  mix raises its window 2.498x; a replay of one schedule drifts 1.16e-7
+  (7.29e-7 of full scale) against a bare-oscillator floor of 0.00e+0. The room
+  is two damped delay lines, one per ear, each ringing on its own: a cycle
+  holding two `DelayNode`s renders differently from one schedule in this
+  browser, so the lines no longer cross.
+- `probe-theme`: PASS, 57.1 s rendered offline at 22050 Hz (3395 frames of
+  drive, stride 2); the form MAKEREADY → PROOF → EDITION → DELIVERY runs 16 bars
+  and 128 half-beats, all four in order, then the piece loops back to the top;
+  lead `0000111111111111`; all 17 keyed bar lines fold the phrase root into
+  55..110 Hz (130.8 Hz → 65.41 Hz); tempo 0.876 s/beat (68.5 BPM) clamped to
+  0.3..1.2; tuning 1/1 9/8 5/4 3/2 5/3 on C3 with 15 slots round-tripping
+  through `slotHz`/`slotOf`; gestures struck platen 41, sheet 24, snap 25, ink
+  8, delivery 8, tape 4; score bits platen 40, sheet 24, pins 16, ink 8,
+  harmony 8, delivery 8, tape 4, wall 8; mix peak 0.518, rms 1.04e-1, clip 0,
+  stereo width 0.055.
+- Booted from `file://` in headless Chrome at 1500×940 through `tools/cdp.mjs`
+  with no window errors and an empty `lastErr`, recording 773 samples and drawing
+  the four room plaques `THE INK LIBRARY`, `THE LIGHT TABLE`,
+  `THE LISTENING BENCH` and `THE PRESS`.
+- The press flow, driven by native pointer events through `SHOPVIEW.grab/move/up`:
+  entering the press gives pin residuals `[0.996,0.995,0.996]`, register
+  11.579 px, lever tag `PULL A PROOF`, state `makeready` and tape
+  `JOB 001 · BRING THE THREE PINS HOME`; dragging each pin from its seat to its
+  home gives residuals `[0,0,0]`, register 0, tape `THREE PINS HOME · DEAD ON`
+  and three `PLATE IN REGISTER` slips; four lever pulls give
+  `PROOF PULLED AT GEN 153 · READ IT · APPROVE` → `APPROVE THE PROOF` →
+  `PROOF APPROVED · EDITION OF 8 RUNNING` → `PULL SHEET 1 OF 8` →
+  `PULL SHEET 2 OF 8` → `PULL SHEET 3 OF 8`, with `SHOP.pulled` =
+  `["proof","edition","edition"]` and the final state `run`, sheet 3 of 8. The
+  screenshot shows the spiral sheet in the three inks with green, orange and
+  violet where they overprint, three seated pins, the loupe `DEAD ON`, the lever
+  tag `PULL SHEET 3 OF 8` over `EDITION RUNNING`, and the job ticket
+  `JOB TICKET · № 001` with rows `COMMISSION GSFC_QC6_STRAIN_2_2.dat.txt`,
+  `PLATE THE RECORD ITSELF`, `LAW SYNCHRONY`, `EDITION 2 OF 8 OUT` and
+  `STATE EDITION RUNNING`.
+- Press geometry at 1500×940: every cam rim and hover ring inside the frame, the
+  five tappet dials sharing one x under one-word labels, and the clamp bar ending
+  inside the frame (`M.clamp.x+M.clamp.w ≤ W-8`).

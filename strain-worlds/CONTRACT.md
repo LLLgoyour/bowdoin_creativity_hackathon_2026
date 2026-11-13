@@ -259,8 +259,9 @@ sonifyLifeFrame(rec, feedback, index, mode, out) -> the same control object
 
 `sonifyFrame` is pure: no DOM, no audio nodes. `mode` is `'tone'` — continuous
 pitch taken from the record's phase-rotation rate and folded into 110..800 Hz —
-or `'music'`, where each quarter-turn of phase steps through `SONIFY_SCALE`, a C
-pentatonic over two octaves. `level` follows the measured amplitude, `pan`
+or `'music'`, where each quarter-turn of phase steps through `SONIFY_SCALE`, the
+five just-intonation slots the plates print — `1/1 9/8 5/4 3/2 5/3` on
+C3 = 130.81278265 Hz — over two octaves. `level` follows the measured amplitude, `pan`
 follows `Re(h)/|h|`, and the same amplitude is `brightness`, which opens the
 filter. The app owns the AudioContext, the loudness value and the mute-on-pause
 behaviour; the module only maps numbers.
@@ -297,12 +298,53 @@ a coverage change invalidates an approved proof; neither may erase a delivered
 edition sheet or renumber the next edition.
 
 The bench writes only through state the app already owns: `AUDIO.enabled`
-(POWER), `AUDIO.mode` (PHASE, `'tone'` or `'music'`), `AUDIO.volume` (LOUDNESS),
-`R.gain` (DISPLAY GAIN) and `APP.scopeOffset` (SWEEP OFFSET). Gain and offset are
-read-only transforms of the samples: DISPLAY GAIN scales the drawn trace and
-SWEEP OFFSET moves the scan line, and neither may mutate `rec`. The scope reads
+(POWER), `AUDIO.mode` (PHASE, `'tone'` or `'music'`), `AUDIO.space` (ROOM),
+`AUDIO.character` (DIRT), `AUDIO.volume` (VOLUME), `AUDIO.themeOn` (THE ROLL,
+the tune instead of the live bench), `R.gain` (GAIN) and `APP.scopeOffset`
+(SWEEP). Gain and offset are read-only transforms of the samples: GAIN scales the
+drawn trace and SWEEP moves the scan line, and neither may mutate `rec`. The scope reads
 `APP.rec`, `APP.scopeHist`, `APP.feedback` and `APP.wrldId`, and never steps a
 world.
+
+## The room's tune (`w-theme.js`)
+
+The piece is not the live mapping: `w-sonify.js` and `w-phrase.js` print what the
+record is doing now, and `w-theme.js` is a tune with a form, played by the room
+itself, one instrument per artifact on the floor. Its pans are the floor plan
+(`SHV.G`, or `TUNE.place` before boot), so the stereo image is the room. Every
+number it uses comes from the datasets: the tonic is the record's own phrase root
+folded into 55..110 Hz at each bar line, the tempo is one bar per turn of the
+record's phase clamped to 0.30..1.20 s/beat, the melody is the record's pitch
+quantised onto the five just slots, the pad is the field's magnitude and phase,
+the bass line is the world's occupation. It is tuned by just intonation —
+`1/1 9/8 5/4 3/2 5/3`, the five slots the plates print — so the tune cannot
+fight the instrument. The master chain is exactly: sum → glue compressor 2:1 →
+high shelf −4 dB at 5.5 kHz → soft-clip waveshaper, oversampling off. The
+transport runs on the instrument's own clock: live the context is the clock,
+offline the clock is the sum of the frame steps the caller schedules, so the same
+schedule renders the same samples twice.
+
+Module exports:
+
+```js
+THEME = {create, bench, softCurve, fold, slotOf, slotHz, slotName, tempoFor,
+         TUNE, FORM, FORM_NAME, HIT, SCORE, LINE, SECTION, LEAD, BARS, UNITS}
+```
+
+`create(ctx, opts)` returns an instance:
+
+```js
+{step(dt,state), hit(name,energy,hz), setMaster(v), setSpace(v), setCharacter(v),
+ silence(seconds), dispose(), report(), tempoNow(), synth, bench,
+ parts:{lead,bass,pad}, ensemble, level}
+```
+
+`state` is `{rec, ph, live, mag, phase, stride, speed}` — the same object
+`updateAudio` writes every frame. `report()` returns
+`{section,sectionName,bar,unit,bpm,tonic,turn,lead,degree,ensemble}`. Offline,
+`opts.out` redirects the bench's output so a render can be captured without a
+speaker. `tools/probe-theme.mjs` renders the whole form offline and asserts the
+sections, the key, the tempo, the tuning and the gesture counts.
 
 ## Verification bar
 

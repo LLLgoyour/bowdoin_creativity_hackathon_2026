@@ -32,10 +32,8 @@ const INK_STATION=(()=>{
   const BAR_NAME=['BLUE','PINK','YELLOW','BLUE+PINK','PINK+YELLOW','BLUE+YELLOW',
                   'ALL THREE'];
   /* the shop's own workflow states, in the words the bench would letter */
-  const PROOF={makeready:'MAKEREADY — NO PROOF READ YET',
-    proof:'PROOF PULLED — READ IT, THEN APPROVE IT',
-    run:'PROOF APPROVED — THE EDITION IS RUNNING',
-    done:'RUN COMPLETE — THE SHEETS STAY IN THE TRAY'};
+  const PROOF={makeready:'MAKEREADY',proof:'PROOF PULLED',run:'EDITION RUNNING',
+    done:'DELIVERED'};
 
   const TIN_Y=144, TIN_W=196, TIN_H=150, TIN_X=[6,214,422];
   const SHELF_Y=296;                        /* the board the tins stand on */
@@ -124,8 +122,7 @@ const INK_STATION=(()=>{
     T.poly(g,[[0,26],[40,0],[LW,0],[LW,88],[0,116]],P.blue,1);
     T.poly(g,[[0,30],[36,6],[LW-14,6],[LW-14,76],[0,100]],P.pane,.86,false);
     say(g,T,P,'THE INK LIBRARY',34,74,22,P.paper,'left');
-    say(g,T,P,'COVERAGE · PAPER KEYS · THE CURRENT SAMPLE',LW-32,54,11,P.sun,'right',480);
-    say(g,T,P,'THE PRESS OWNS THE PROOF, THE RUN AND THE EDITION',LW-32,76,9.5,P.paper,'right',480);
+    say(g,T,P,'COVERAGE · THE CURRENT SAMPLE',LW-32,54,11,P.sun,'right',480);
 
     /* the shelf, its brackets, and the three tins standing on it */
     T.poly(g,[[0,SHELF_Y],[624,SHELF_Y-4],[624,SHELF_Y+14],[0,SHELF_Y+18]],P.wood,1);
@@ -136,22 +133,18 @@ const INK_STATION=(()=>{
     for(let i=0;i<3;i++)drawTin(g,T,P,TIN_X[i],i,PLATE[i]);
     for(let i=0;i<3;i++)drawLadder(g,T,P,TIN_X[i],i);
 
-    /* the bench note: what the ladders are, and what a dial is not */
+    /* the bench note: what the ladders are */
     T.poly(g,[[6,NOTE_Y],[6+NOTE_W,NOTE_Y-4],[6+NOTE_W,NOTE_Y+NOTE_H-4],[6,NOTE_Y+NOTE_H]],
       P.paper,1);
     T.disc(g,17,NOTE_Y+14,3.5,P.coral,1);
-    say(g,T,P,'EACH LADDER IS ONE INK SCREENED — 12% OF THAT PLATE\u2019S DOTS UP TO SOLID.',
+    say(g,T,P,'12% TO SOLID · ONE INK PER LADDER',
       30,NOTE_Y+12,9.5,P.blue,'left',NOTE_W-36);
-    say(g,T,P,'THE TINS HOLD THE INK; THE DIALS SET HOW MUCH OF EACH PLATE REACHES THE SHEET.',
-      30,NOTE_Y+24,9.5,P.mid,'left',NOTE_W-36);
-    say(g,T,P,'A DIAL CHANGES COVERAGE. IT DOES NOT MEASURE THE TIN, AND IT DOES NOT EMPTY IT.',
-      30,NOTE_Y+36,9.5,P.coral,'left',NOTE_W-36);
 
     /* the overprint chart: the seven recipes the press can make, each solid and
        then at half tint, printed on this paper like everything else here */
     T.poly(g,[[6,CHART_Y+4],[6+CHART_W,CHART_Y],[6+CHART_W,CHART_Y+CHART_H-4],
       [6,CHART_Y+CHART_H]],P.paper,1);
-    say(g,T,P,'OVERPRINT CHART · ONE PAPER, THREE PLATES',22,CHART_Y+24,12.5,P.blue,'left');
+    say(g,T,P,'OVERPRINT CHART',22,CHART_Y+24,12.5,P.blue,'left');
     for(let k=0;k<BAR.length;k++){
       const px=CELL_X+k*2*(CELL_W+CELL_GAP);
       say(g,T,P,BAR_NAME[k],px+CELL_W+CELL_GAP/2,CHART_Y+42,8,P.mid,'center',(CELL_W+CELL_GAP)*2-6);
@@ -161,16 +154,8 @@ const INK_STATION=(()=>{
           h?[c[0]*.5,c[1]*.5,c[2]*.5]:c,1,true);
       }
     }
-    say(g,T,P,'LEFT CELL OF EACH PAIR IS THE PLATE AT FULL INK; THE RIGHT CELL IS THE SAME PLATE AT HALF TINT.',
+    say(g,T,P,'FULL INK LEFT · HALF TINT RIGHT',
       22,CHART_Y+132,10,P.blue,'left',CHART_W-28);
-    say(g,T,P,'THE PRESS MIXES NOTHING IN A POT: THE COLOUR HAPPENS ON THE SHEET WHERE THE THREE PLATES MEET.',
-      22,CHART_Y+150,10,P.mid,'left',CHART_W-28);
-    say(g,T,P,'EVERY COLOUR THIS SHOP NAMES IS A RECIPE OF THESE THREE INKS — WHICH IS WHAT MAKES IT PRINTABLE.',
-      22,CHART_Y+168,10,P.mid,'left',CHART_W-28);
-    say(g,T,P,'THE SEVEN RECIPES ARE FIXED. THE DIALS CHANGE HOW HEAVY EACH PLATE PRINTS THEM.',
-      22,CHART_Y+186,10,P.mid,'left',CHART_W-28);
-    say(g,T,P,'TRUST THE PROOF OVER THIS CHART: THE CHART SAYS WHAT IS POSSIBLE, THE SHEET SAYS WHAT PRINTED.',
-      22,CHART_Y+201,10,P.coral,'left',CHART_W-28);
 
     /* the sample sheet on its own board, and the printing area it is laid in */
     T.poly(g,[[BOARD_X,BOARD_Y],[BOARD_X+BOARD_W,BOARD_Y],
@@ -193,23 +178,16 @@ const INK_STATION=(()=>{
     T.poly(g,[[SOURCE_X,SOURCE_Y],[SOURCE_X+SOURCE_W,SOURCE_Y],
       [SOURCE_X+SOURCE_W,SOURCE_Y+26],[SOURCE_X,SOURCE_Y+30]],P.pane,1);
     say(g,T,P,'THE SAMPLE ON THE PAPER',SOURCE_X+12,SOURCE_Y+17,11.5,P.paper,'left');
-    say(g,T,P,'CURRENT OVERPRINT',SOURCE_X+SOURCE_W-12,SOURCE_Y+17,9,P.sun,'right');
     T.poly(g,[[PANEL_X,PANEL_Y+4],[PANEL_X+PANEL_W,PANEL_Y],
       [PANEL_X+PANEL_W,PANEL_Y+PANEL_H],[PANEL_X,PANEL_Y+PANEL_H+4]],P.pane,1);
     T.line(g,[[PANEL_X+12,PANEL_Y+10],[PANEL_X+PANEL_W-12,PANEL_Y+8]],P.sun,1.1);
     say(g,T,P,'COVERAGE DIALS · ONE PER PLATE',PANEL_X+12,PANEL_Y+22,10.5,P.paper,'left');
     say(g,T,P,'0.30'+TIMES+' LIGHT · 1.40'+TIMES+' HEAVY',PANEL_X+PANEL_W-12,PANEL_Y+22,9,P.sun,'right');
-    say(g,T,P,'ONE DIAL PER PLATE · CLOCKWISE LAYS THE INK HEAVIER.',PANEL_X+12,PANEL_Y+162,8.5,P.paper,'left',PANEL_W-24);
-    say(g,T,P,'NOTHING HERE MEASURES THE TIN — ONLY WHAT REACHES THE SHEET.',PANEL_X+12,PANEL_Y+174,8.5,P.paper,'left',PANEL_W-24);
 
     /* the bench lettering, cut along the front edge */
     T.line(g,[[0,BAND_Y],[LW,BAND_Y]],P.pane,1.2);
-    say(g,T,P,'CHANGING COVERAGE IS A JOB CHANGE: THE PROOF NO LONGER STANDS, SO A NEW PROOF IS PULLED AND READ.',
+    say(g,T,P,'NEW COVERAGE VOIDS THE PROOF · KEPT SHEETS STAY',
       2,BAND_Y+22,12,P.coral,'left',LW-24);
-    say(g,T,P,'FINISHED EDITION SHEETS ARE KEPT IN THE TRAY. A KEPT SHEET IS NOT PRINTED AGAIN.',
-      2,BAND_Y+44,11,P.blue,'left',LW-24);
-    say(g,T,P,'THIS BENCH MIXES INK; THE PRESS PULLS THE PROOF, RUNS THE EDITION AND DECIDES WHAT IS KEPT.',
-      2,BAND_Y+60,9.5,P.mid,'left',LW-24);
   }
 
   /* ── the bench, printed once per window size ─────────────────────────────
@@ -243,8 +221,8 @@ const INK_STATION=(()=>{
       T.text(g,'A PROOF IS PULLED AT THE PRESS',WIN_X+WIN_W/2,WIN_Y+WIN_H/2+14,9,P.dim,'center');
     }
     const bx=SHEET_X+10,bw=SHEET_W-20,by=WIN_Y+WIN_H;
-    say(g,T,P,'PLATE · '+plate+'      LAW · '+law,bx,by+32,9.5,P.blue,'left',bw);
-    say(g,T,P,'PROOF · '+state+(sheets?('  ·  '+kept+' OF '+sheets+' SHEETS KEPT'):''),
+    say(g,T,P,'PLATE · '+plate+' · LAW · '+law,bx,by+32,9.5,P.blue,'left',bw);
+    say(g,T,P,'STATE · '+state+(sheets?(' · '+kept+' OF '+sheets+' SHEETS KEPT'):''),
       bx,by+46,9.5,P.mid,'left',bw);
     say(g,T,P,'COVERAGE · '+keys[0]+TIMES+' '+keys[1]+TIMES+' '+keys[2]+TIMES+' ON THE THREE PLATES',
       bx,by+60,9.5,P.coral,'left',bw);

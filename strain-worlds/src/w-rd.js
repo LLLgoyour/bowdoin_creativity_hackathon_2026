@@ -85,7 +85,7 @@
   }
   defWorld({
     id: 'rd', label: 'REACTION',
-    blurb: 'A mask-confined two-chemical reef. Eyes: age ≥ 60, v ≥ 0.30, concave on both axes; rank higher v, older age, lower index, capped at floor(live/4). Near-static sparse regimes: GSFC spectro has 2 births/1 retreat in steps 1801–2000; HST has 17 cards on 143 substrate cells at step 120.',
+    blurb: 'A mask-confined two-chemical reef; the eyes are old, concentrated, concave cells.',
     params: [
       { key: 'F', label: 'feed F', min: 0.01, max: 0.09, step: 0.001, def: 0.037 },
       { key: 'k', label: 'kill k', min: 0.04, max: 0.07, step: 0.001, def: 0.06 },
